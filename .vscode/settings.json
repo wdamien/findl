@@ -1,0 +1,36 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+    "files.exclude": {
+        "lib": false 
+    },
+    "search.exclude": {
+        "lib": true
+    },
+    // Turn off tsc task auto detection since we have the necessary tasks as npm scripts
+    "typescript.tsc.autoDetect": "off",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": true,
+        "source.organizeImports": false
+    },
+    "spellright.language": [
+        "en"
+    ],
+    "spellright.documentTypes": [
+        "markdown",
+        "plaintext",
+        "typescript",
+        "javascript"
+    ],
+    "spellright.ignoreRegExpsByClass": {
+        "markdown": [ "/&amp;/g", "/&nbsp;/g" ],
+        "typescript": [ "/#([a-f0-9]){6,8}/g" ],
+        "typescriptreact": [ "/#([a-f0-9]){6,8}/g" ],
+        "html": [ "/<script>[^]*?</script>/gm" ]
+    },
+    "spellright.notificationClass": "warning",
+    "eslint.format.enable": true,
+    "eslint.alwaysShowStatus": true,
+    "eslint.lintTask.enable": true,
+    "eslint.run": "onType",
+    "typescript.tsdk": "node_modules/typescript/lib"
+}

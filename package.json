@@ -1,0 +1,41 @@
+{
+    "name": "findl",
+    "version": "0.1.0",
+    "description": "Output all the third-party licenses used in your node based project.",
+    "main": "lib/index.js",
+    "bin": {
+        "findl": "./bin/findl.js"
+    },
+    "scripts": {
+        "dev": "npx ts-node index.ts",
+        "build": "webpack"
+    },
+    "author": "wdamien",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/wdamien/findl.git"
+    },
+    "dependencies": {
+        "async": "^3.2.0",
+        "cli-progress": "^3.9.0",
+        "colors": "^1.4.0",
+        "fs-extra": "^9.1.0",
+        "package-json": "^6.5.0",
+        "yargs": "^16.2.0"
+    },
+    "devDependencies": {
+        "@types/async": "^3.2.5",
+        "@types/cli-progress": "^3.9.1",
+        "@types/fs-extra": "^9.0.8",
+        "@types/yargs": "^16.0.1",
+        "@typescript-eslint/eslint-plugin": "^4.19.0",
+        "@typescript-eslint/parser": "^4.19.0",
+        "eslint": "^7.22.0",
+        "ts-loader": "^8.0.18",
+        "type-fest": "^1.0.1",
+        "typescript": "^4.2.3",
+        "webpack": "^5.28.0",
+        "webpack-cli": "^4.5.0"
+    }
+}
