@@ -1,6 +1,6 @@
 {
     "name": "findl",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Output all the third-party licenses used in your node based project.",
     "main": "lib/index.js",
     "bin": {
