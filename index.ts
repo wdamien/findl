@@ -239,23 +239,26 @@ const formatMissingReason = (item: QueueItem) => {
     }
 };
 
-const npmDepsToPaths = (deep: boolean = false) => {
-    return new Promise<string[]>((resolve, reject) => {
-        const args = ['ls', '--prod', '--json'];
-        if (deep) {
-            args.push('--all');
-        }
-        const npm = spawn('npm', args, { cwd });
-        const npmData: Buffer[] = [];
-        npm.stdout.on('data', (data) => {
-            npmData.push(data);
-        });
+const npmDepsToPaths = async (deep: boolean = false) => {
+    const args = ['ls', '--prod', '--json', '--depth', deep?'Infinity':'0'];
+    
+    const deps = await npm(args);
+    const result = JSON.parse(deps);
+    const packagePaths: string[] = [];
+    walkPath(result.dependencies, packagePaths);
+    return packagePaths;
+};
 
-        npm.on('close', (code) => {
-            const result = JSON.parse(Buffer.concat(npmData).toString());
-            const packagePaths: string[] = [];
-            walkPath(result.dependencies, packagePaths);
-            resolve(packagePaths);
+const npm = (args: string[]) => {
+    return new Promise<string>((resolve, reject) => {
+    const npm = spawn('npm', args, { cwd });
+        const buffer: Buffer[] = [];
+        npm.stdout.on('data', (data) => {
+            buffer.push(data);
+        });
+        
+        npm.on('close', () => {
+            resolve(Buffer.concat(buffer).toString());
         });
     });
 };
@@ -305,7 +308,7 @@ export const run = async () => {
         return;
     }
 
-    const deps = await npmDepsToPaths(logDeep);
+    const deps:string[] = await npmDepsToPaths(logDeep);
 
     deps.forEach((item) => {
         const queueItem: QueueItem = {
