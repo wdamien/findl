@@ -7,9 +7,13 @@ import * as https from 'https';
 import packageJson from 'package-json';
 import * as path from 'path';
 import { PackageJson } from 'type-fest';
-import yargs from 'yargs';
+import yargs from 'yargs/yargs';
 
 const result: QueueItem[] = [];
+let verbose:boolean = false;
+let progressBar:cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
+let cwd:string = process.cwd();
+let outPath: string;
 
 type QueueItem = {
     name: string;
@@ -31,7 +35,11 @@ const prettyGitURL = (repo: string | null) => {
             .replace('git@', 'https://')
             .replace('git://', 'https://')
             .replace('github.com:', 'github.com/')
+            .replace('github:', 'github.com/')
             .replace('gitlab.com:', 'gitlab.com/')
+            .replace('gitlab:', 'gitlab.com/')
+            .replace('bitbucket.org:', 'bitbucket.org/')
+            .replace('bitbucket:', 'bitbucket.org/')
             .replace('.git', '');
     }
     return repo;
@@ -104,6 +112,9 @@ const processingQueue = async.queue(async (queueItem: QueueItem, cb: () => void)
                 for (let i = 0; i < LicenseFileNames.length; i++) {
                     const license = LicenseFileNames[i];
 
+                    // Some urls will have not protocol, so add on https as needed.
+                    queueItem.licenseUrl = queueItem.licenseUrl?.indexOf('https://') === 0?queueItem.licenseUrl:'https://' + queueItem.licenseUrl;
+
                     if (await validateLicenseURL(queueItem, license)) {
                         break;
                     }
@@ -140,7 +151,8 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
         const urlToCheck =
             PrimaryBranchNames.find((b) => queueItem.repositoryURL!.includes(`/${b}/`)) !== undefined
                 ? `${queueItem.repositoryURL}/${license}`
-                : `${queueItem.repositoryURL}/blob/${primaryBranch}/${license}`;
+                // Gitlab and Github both use blob, whereas bitbucket uses src.
+                : `${queueItem.repositoryURL}/${queueItem.repositoryURL?.includes('bitbucket.org')?'src':'blob'}/${primaryBranch}/${license}`;
         const urlExists = await ping(urlToCheck);
         log(queueItem, `Checking url: ${urlToCheck} Exists: ${urlExists}`);
         if (urlExists !== false) {
@@ -157,7 +169,7 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
 const ping = async (_url: string) => {
     return new Promise<boolean | string>((resolve, reject) => {
         const pathParts = safeURL(_url);
-        const options = {
+        const options:https.RequestOptions = {
             hostname: pathParts.hostname,
             port: pathParts.port,
             path: pathParts.pathname,
@@ -199,7 +211,7 @@ processingQueue.drain(() => {
             })
             .map((q) => {
                 if (q.package) {
-                    return `${q.name} (${q.package.license})\n${q.package.description}\n${q.repositoryURL}\n${q.licenseUrl}`;
+                    return `${q.name} (${q.package.license})\n${[q.package.description, q.repositoryURL, q.licenseUrl].filter(l => l !== null && l !== undefined).join('\n')}`;
                 } else {
                     return `${q.name} -> No package.json was found!`;
                 }
@@ -293,16 +305,24 @@ const log = (item: QueueItem | Error, value: string = '') => {
 };
 
 const noop = () => {};
-const argv = yargs(process.argv).argv;
-const logDeep = argv.deep === true;
-const verbose = argv.verbose === true;
-const cwd = argv.cwd === undefined ? process.cwd() : String(argv.cwd);
-const outPath = path.join(cwd, 'installed-packages.txt');
-const progressBar = verbose
-    ? { start: noop, update: noop, stop: noop }
-    : new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic);
 
 export const run = async () => {
+    const argv = await yargs(process.argv.slice(2)).options({
+        deep: {type: 'boolean', default: false},
+        verbose: {type: 'boolean', default: false},
+        cwd: {type: 'string', default: process.cwd()}
+    }).argv;
+    
+    const logDeep = argv.deep === true;
+
+    verbose = argv.verbose === true;
+    cwd = argv.cwd;
+    outPath = path.join(cwd, 'installed-packages.txt');
+
+    progressBar = verbose
+        ? { start: noop, update: noop, stop: noop }
+        : new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic);
+
     if (!(await fs.pathExists(path.join(cwd, 'package.json')))) {
         console.log(colors.bold(colors.red('No package.json found! Exiting.')));
         return;
