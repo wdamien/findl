@@ -1,86 +1,190 @@
-import * as async from 'async';
-import { spawn } from 'child_process';
-import cliProgress from 'cli-progress';
+import async from 'async';
+import * as cliProgress from 'cli-progress';
 import colors from 'colors/safe';
-import fs from 'fs-extra';
-import * as https from 'https';
+import * as fs from 'fs-extra';
 import packageJson from 'package-json';
 import * as path from 'path';
 import { PackageJson } from 'type-fest';
-import yargs from 'yargs/yargs';
+import * as yamljs from 'yamljs';
+import yargs from 'yargs';
+import fetch from 'node-fetch';
+import { PubspecFile, PubspecFileError } from './FlutterDeps';
+import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL } from './Utils';
+
+type GithubLicense = {
+    name: string;
+    path: string;
+    sha: string;
+    size: number;
+    url: string;
+    html_url: string;
+    git_url: string;
+    download_url: string;
+    type: string;
+    content: string;
+    encoding: string;
+    _links: Links;
+    license: License;
+};
+
+type GithubError = {
+    message: string;
+    documentation_url: string;
+};
+
+type Links = {
+    self: string;
+    git: string;
+    html: string;
+};
+
+type License = {
+    key: string;
+    name: string;
+    spdx_id: string;
+    url: string;
+    node_id: string;
+};
 
 const result: QueueItem[] = [];
-let verbose:boolean = false;
-let progressBar:cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
-let cwd:string = process.cwd();
+let verbose: boolean = false;
+let progressBar: cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
+let cwd: string = process.cwd();
 let outPath: string;
 
 type QueueItem = {
     name: string;
     parent: string;
     repositoryURL: string | null;
-    package?: PackageJson;
+    license?:string;
+    description?: string;
     licenseUrl: string | null;
     licenseUrlIsValid: boolean | null;
     missingLicenseReason?: 'no-local' | 'no-web' | 'missing-repo';
 };
 
-const LicenseFileNames = ['LICENSE', 'LICENSE.txt', 'license', 'License', 'license.md', 'License.md', 'LICENSE.md', 'LICENSE-MIT.txt'];
+const LicenseFileNames = [
+    'LICENSE',
+    'LICENSE.txt',
+    'license',
+    'License',
+    'license.md',
+    'License.md',
+    'LICENSE.md',
+    'LICENSE-MIT.txt',
+];
 const PrimaryBranchNames = ['master', 'main'];
 
-const prettyGitURL = (repo: string | null) => {
-    if (repo) {
-        return repo
-            .replace('git+', '')
-            .replace('git@', 'https://')
-            .replace('git://', 'https://')
-            .replace('github.com:', 'github.com/')
-            .replace('github:', 'github.com/')
-            .replace('gitlab.com:', 'gitlab.com/')
-            .replace('gitlab:', 'gitlab.com/')
-            .replace('bitbucket.org:', 'bitbucket.org/')
-            .replace('bitbucket:', 'bitbucket.org/')
-            .replace('.git', '');
+const postCommandLog: string[] = [];
+let useGithubAPI = true;
+
+const getRepoLicense = async (repo: string) => {
+    let license, licenseUrl;
+
+    if (repo && useGithubAPI) {
+        const repoPathMatch = repo.match(/https:\/\/github.com\/([^/]+\/[^/]+)/);
+        const repoPath = repoPathMatch ? repoPathMatch[1] : null;
+
+        if (repoPath) {
+            try {
+                const licenseResult = await fetch(`https://api.github.com/repos/${repoPath}/license`);
+                const licenseResultJSON: GithubLicense | GithubError = await licenseResult.json();
+                if ('message' in licenseResultJSON) {
+                    const message = `${licenseResultJSON.message}: ${licenseResultJSON.documentation_url}`;
+                    if (!postCommandLog.includes(message)) {
+                        postCommandLog.push(message);
+                    }
+                    useGithubAPI = false;
+                } else {
+                    licenseUrl = licenseResultJSON.download_url;
+                    if (licenseResultJSON.license.spdx_id !== 'NOASSERTION') {
+                        license = licenseResultJSON.license.spdx_id;
+                    }
+                }
+            } catch (e) {
+                // Oh well.
+            }
+        }
     }
-    return repo;
+
+    return { license, licenseUrl };
 };
 
-const safeURL = (value: string) => {
-    try {
-        return new URL(value);
-    } catch {
-        return {
-            hash: null,
-            host: null,
-            hostname: null,
-            href: null,
-            origin: null,
-            password: null,
-            pathname: null,
-            port: null,
-            protocol: null,
-            search: null,
-            searchParams: null,
-            username: null,
-        };
+const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
+    let pubspecFile: PubspecFile | null = null;
+
+    if (queueItem.repositoryURL?.indexOf('http') !== 0) {
+        pubspecFile = await fetch(`https://pub.dev/api/packages/${queueItem.repositoryURL}`)
+            .then((response) => response.json())
+            .then(async (json: PubspecFile | PubspecFileError) => {
+                if ('error' in json) {
+                    // console.log(json.error.message);
+                    return null;
+                }
+                return json;
+            });
+    } else if (queueItem.repositoryURL === 'flutter') {
+        queueItem.repositoryURL = 'https://github.com/flutter/flutter/';
     }
+
+    const pubspec = pubspecFile?.latest.pubspec;
+
+    if (pubspec) {
+        queueItem.repositoryURL = pubspec.repository ?? pubspec.homepage ?? queueItem.repositoryURL ?? null;
+        queueItem.name = pubspec.name;
+        queueItem.description = pubspec.description;
+    }
+
+    if (queueItem.repositoryURL) {
+        const licenseData = await getRepoLicense(queueItem.repositoryURL);
+        queueItem.license = licenseData.license;
+        queueItem.licenseUrl = licenseData.licenseUrl ?? queueItem.licenseUrl ?? null;
+
+        // The API never gave us a URL, so look for one.
+        if (!queueItem.licenseUrl) {
+            for (let i = 0; i < LicenseFileNames.length; i++) {
+                const license = LicenseFileNames[i];
+
+                // Some urls will have not protocol, so add on https as needed.
+                queueItem.licenseUrl =
+                    queueItem.licenseUrl?.indexOf('https://') === 0
+                        ? queueItem.licenseUrl
+                        : 'https://' + queueItem.licenseUrl;
+
+                if (await validateLicenseURL(queueItem, license)) {
+                    break;
+                }
+            }
+        } else {
+            queueItem.licenseUrlIsValid = true;
+        }
+    }
+
+    result.push(queueItem);
+    progressBar.update(result.length);
+
+    cb();
 };
 
-const packageHash: Record<string, QueueItem> = {};
-const processingQueue = async.queue(async (queueItem: QueueItem, cb: () => void) => {
+const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
     const packageJsonPath = `${queueItem.parent}/package.json`;
     if (!(await fs.pathExists(packageJsonPath))) {
         queueItem.licenseUrlIsValid = false;
         queueItem.missingLicenseReason = 'no-local';
     } else {
         const packageJSON: PackageJson = await fs.readJSON(packageJsonPath);
-        queueItem.package = packageJSON;
+        // queueItem.package = packageJSON;
+        queueItem.description = packageJSON.description;
+        queueItem.license = packageJSON.license;
 
         queueItem.repositoryURL = packageJSON.repository
-            ? prettyGitURL(typeof packageJSON.repository === 'string' ? packageJSON.repository : packageJSON.repository.url)
+            ? prettyGitURL(
+                  typeof packageJSON.repository === 'string' ? packageJSON.repository : packageJSON.repository.url
+              )
             : null;
 
         const repoPeices = safeURL(queueItem.repositoryURL || '');
+
         // Missing the repo url, so try to load its details from npm.
         if (repoPeices.protocol === null) {
             const npmData = await packageJson(queueItem.name, { fullMetadata: true });
@@ -109,14 +213,29 @@ const processingQueue = async.queue(async (queueItem: QueueItem, cb: () => void)
             // No local license was found :/, so check the web.
             if (queueItem.licenseUrlIsValid === null) {
                 log(queueItem, 'No local license was found. checking the web.');
-                for (let i = 0; i < LicenseFileNames.length; i++) {
-                    const license = LicenseFileNames[i];
 
-                    // Some urls will have not protocol, so add on https as needed.
-                    queueItem.licenseUrl = queueItem.licenseUrl?.indexOf('https://') === 0?queueItem.licenseUrl:'https://' + queueItem.licenseUrl;
+                const repoLicense = await getRepoLicense(queueItem.repositoryURL);
+                console.log(repoLicense);
+                if (repoLicense.license && repoLicense.licenseUrl) {
+                    console.log('Found license on Github.');
+                    queueItem.licenseUrlIsValid = true;
+                    queueItem.licenseUrl = repoLicense.licenseUrl;
+                    queueItem.license = repoLicense.license;
+                }
 
-                    if (await validateLicenseURL(queueItem, license)) {
-                        break;
+                if (!queueItem.licenseUrlIsValid) {
+                    for (let i = 0; i < LicenseFileNames.length; i++) {
+                        const license = LicenseFileNames[i];
+
+                        // Some urls will have not protocol, so add on https as needed.
+                        queueItem.licenseUrl =
+                            queueItem.licenseUrl?.indexOf('https://') === 0
+                                ? queueItem.licenseUrl
+                                : 'https://' + queueItem.licenseUrl;
+
+                        if (await validateLicenseURL(queueItem, license)) {
+                            break;
+                        }
                     }
                 }
 
@@ -137,7 +256,9 @@ const processingQueue = async.queue(async (queueItem: QueueItem, cb: () => void)
     progressBar.update(result.length);
 
     cb();
-}, 4);
+};
+
+const packageHash: Record<string, QueueItem> = {};
 
 const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
     if (queueItem.licenseUrlIsValid !== null) {
@@ -149,10 +270,12 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
     for (let i = 0; i < PrimaryBranchNames.length; i++) {
         const primaryBranch = PrimaryBranchNames[i];
         const urlToCheck =
-            PrimaryBranchNames.find((b) => queueItem.repositoryURL!.includes(`/${b}/`)) !== undefined
+            PrimaryBranchNames.find((b) => queueItem.repositoryURL?.includes(`/${b}/`)) !== undefined
                 ? `${queueItem.repositoryURL}/${license}`
-                // Gitlab and Github both use blob, whereas bitbucket uses src.
-                : `${queueItem.repositoryURL}/${queueItem.repositoryURL?.includes('bitbucket.org')?'src':'blob'}/${primaryBranch}/${license}`;
+                : // Gitlab and Github both use blob, whereas bitbucket uses src.
+                  `${queueItem.repositoryURL}/${
+                      queueItem.repositoryURL?.includes('bitbucket.org') ? 'src' : 'blob'
+                  }/${primaryBranch}/${license}`;
         const urlExists = await ping(urlToCheck);
         log(queueItem, `Checking url: ${urlToCheck} Exists: ${urlExists}`);
         if (urlExists !== false) {
@@ -166,79 +289,6 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
     return false;
 };
 
-const ping = async (_url: string) => {
-    return new Promise<boolean | string>((resolve, reject) => {
-        const pathParts = safeURL(_url);
-        const options:https.RequestOptions = {
-            hostname: pathParts.hostname,
-            port: pathParts.port,
-            path: pathParts.pathname,
-            method: 'HEAD',
-        };
-
-        const req = https.request(options, (res) => {
-            switch (res.statusCode) {
-                case 200:
-                    resolve(true);
-                    break;
-                case 301:
-                case 307:
-                case 308:
-                    resolve(res.headers.location !== undefined ? res.headers.location : true);
-                    break;
-                default:
-                    resolve(false);
-            }
-        });
-
-        req.on('error', (e) => {
-            log(e);
-            resolve(false);
-        });
-
-        req.end();
-    });
-};
-
-processingQueue.drain(() => {
-    progressBar.stop();
-
-    fs.writeFile(
-        outPath,
-        result
-            .sort((a, b) => {
-                return a.name < b.name ? -1 : 1;
-            })
-            .map((q) => {
-                if (q.package) {
-                    return `${q.name} (${q.package.license})\n${[q.package.description, q.repositoryURL, q.licenseUrl].filter(l => l !== null && l !== undefined).join('\n')}`;
-                } else {
-                    return `${q.name} -> No package.json was found!`;
-                }
-            })
-            .join('\n\n')
-    );
-    const successful = result.filter((q) => q.licenseUrlIsValid);
-    const unsuccessful = result.filter((q) => !q.licenseUrlIsValid);
-
-    const successfulCount = successful.length;
-    const unsuccessfulCount = unsuccessful.length;
-    const total = successfulCount + unsuccessfulCount;
-
-    console.log(colors.bold(colors.green(`\nSaved to: ${outPath}`)));
-    console.log(colors.green(`Processed ${total} packages.`));
-
-    if (total !== successfulCount) {
-        console.log(colors.yellow(`Found ${successfulCount} urls.`));
-    } else {
-        console.log(colors.green('Found licenses for all the packages.'));
-    }
-
-    if (unsuccessfulCount > 0) {
-        console.log(colors.bold(colors.red(`Can\'t find ${unsuccessfulCount} license urls! Missing:`)));
-        console.log('\t' + unsuccessful.map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}`).join('\n\t'));
-    }
-});
 
 const formatMissingReason = (item: QueueItem) => {
     switch (item.missingLicenseReason) {
@@ -248,46 +298,6 @@ const formatMissingReason = (item: QueueItem) => {
             return ' -> Cannot find a license on your disk.';
         case 'no-web':
             return ' -> Cannot find a license on the web.';
-    }
-};
-
-const npmDepsToPaths = async (deep: boolean = false) => {
-    const args = ['ls', '--prod', '--json', '--depth', deep?'Infinity':'0'];
-    
-    const deps = await npm(args);
-    const result = JSON.parse(deps);
-    const packagePaths: string[] = [];
-    walkPath(result.dependencies, packagePaths);
-    return packagePaths;
-};
-
-const npm = (args: string[]) => {
-    return new Promise<string>((resolve, reject) => {
-    const npm = spawn('npm', args, { cwd });
-        const buffer: Buffer[] = [];
-        npm.stdout.on('data', (data) => {
-            buffer.push(data);
-        });
-        
-        npm.on('close', () => {
-            resolve(Buffer.concat(buffer).toString());
-        });
-    });
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const walkPath = (data: any, results: any[]) => {
-    for (const key in data) {
-        if (Object.prototype.hasOwnProperty.call(data, key)) {
-            const module = data[key];
-            if (results.find((p) => p === key) === undefined) {
-                results.push(key);
-            }
-
-            if (module.dependencies) {
-                walkPath(module.dependencies, results);
-            }
-        }
     }
 };
 
@@ -304,31 +314,177 @@ const log = (item: QueueItem | Error, value: string = '') => {
     }
 };
 
-const noop = () => {};
+enum DependencyType {
+    node = 'node',
+    flutter = 'flutter',
+}
+
+const findProjectType = async () => {
+    const supportedTypes = [
+        {
+            type: DependencyType.node,
+            dependenciesFile: 'package.json',
+            processor: processNPMQueue,
+        },
+        {
+            type: DependencyType.flutter,
+            dependenciesFile: 'pubspec.yaml',
+            processor: processPubspecQueue,
+        },
+    ];
+
+    for (let i = 0; i < supportedTypes.length; i++) {
+        const element = supportedTypes[i];
+        if (await fs.pathExists(path.join(cwd, element.dependenciesFile))) {
+            return element;
+        }
+    }
+
+    return null;
+};
 
 export const run = async () => {
     const argv = await yargs(process.argv.slice(2)).options({
-        deep: {type: 'boolean', default: false},
-        verbose: {type: 'boolean', default: false},
-        cwd: {type: 'string', default: process.cwd()}
+        deep: { type: 'boolean', default: false },
+        verbose: { type: 'boolean', default: false },
+        cwd: { type: 'string', default: process.cwd() },
     }).argv;
-    
+
     const logDeep = argv.deep === true;
 
     verbose = argv.verbose === true;
     cwd = argv.cwd;
     outPath = path.join(cwd, 'installed-packages.txt');
 
+    const projectType = await findProjectType();
+
+    if (projectType === null) {
+        console.log(colors.bold(colors.red('No supported dependencies file found. Exiting.')));
+        return;
+    } else {
+        console.log(colors.bold(colors.green(`Found a ${projectType.type} project.`)));
+    }
+
+    const processingQueue: async.QueueObject<QueueItem> = async.queue(projectType.processor, 4);
+    processingQueue.drain(() => {
+        progressBar.stop();
+
+        fs.writeFile(
+            outPath,
+            result
+                .sort((a, b) => {
+                    return a.name < b.name ? -1 : 1;
+                })
+                .map((q) => {
+                    if (q.license) {
+                        return `${q.name} (${q.license})\n${[
+                            q.description,
+                            q.repositoryURL,
+                            q.licenseUrl,
+                        ]
+                        .filter((l) => l !== null && l !== undefined)
+                        .join('\n')}`;
+                    } else {
+                        return `${q.name} -> No license was found!`;
+                    }
+                })
+                .join('\n\n')
+        );
+        const successful = result.filter((q) => q.licenseUrlIsValid);
+        const unsuccessful = result.filter((q) => !q.licenseUrlIsValid);
+
+        const successfulCount = successful.length;
+        const unsuccessfulCount = unsuccessful.length;
+        const total = successfulCount + unsuccessfulCount;
+
+        if (postCommandLog.length > 0) {
+            console.log(colors.yellow(postCommandLog.join('\n')));
+        }
+
+        console.log(colors.bold(colors.green(`\nSaved to: ${outPath}`)));
+        console.log(colors.green(`Processed ${total} packages.`));
+
+        if (total !== successfulCount) {
+            console.log(colors.yellow(`Found ${successfulCount} urls.`));
+        } else {
+            console.log(colors.green('Found licenses for all the packages.'));
+        }
+
+        if (unsuccessfulCount > 0) {
+            console.log(colors.bold(colors.red(`Can\'t find ${unsuccessfulCount} license url's! Missing:`)));
+            console.log(
+                '\t' +
+                    unsuccessful
+                        .map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}: ${l.repositoryURL}`)
+                        .join('\n\t')
+            );
+        }
+    });
+
     progressBar = verbose
         ? { start: noop, update: noop, stop: noop }
         : new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic);
 
-    if (!(await fs.pathExists(path.join(cwd, 'package.json')))) {
-        console.log(colors.bold(colors.red('No package.json found! Exiting.')));
-        return;
+    let deps: QueueItem[] | null = null;
+    if (projectType.type === DependencyType.node) {
+        deps = await getNPMdeps(logDeep);
+    } else if (projectType.type === DependencyType.flutter) {
+        deps = await getFlutterDeps();
     }
 
-    const deps:string[] = await npmDepsToPaths(logDeep);
+    if (deps && deps.length > 0) {
+        processingQueue.push(deps);
+        console.log(colors.yellow(`Processing ${deps.length} packages.`));
+        progressBar.start(deps.length, 0);
+    } else {
+        console.log(colors.bold(colors.red('No dependencies found. Exiting.')));
+    }
+};
+
+const getFlutterDeps = async () => {
+    return new Promise<QueueItem[]>((resolve, reject) => {
+        const queueItems: QueueItem[] = [];
+        yamljs.load(path.join(cwd, 'pubspec.yaml'), (pubspec) => {
+            const dependencies: Record<string, any> = {};
+
+            for (const key in pubspec.builders) {
+                dependencies[key] = pubspec.builders[key];
+            }
+            for (const key in pubspec.dependencies) {
+                dependencies[key] = pubspec.dependencies[key];
+            }
+            for (const key in pubspec.dev_dependencies) {
+                dependencies[key] = pubspec.dev_dependencies[key];
+            }
+
+            const dependenciesList = Object.entries(dependencies);
+            dependenciesList.forEach(([key, value]) => {
+                const queueItem: QueueItem = {
+                    name: key,
+                    parent: '',
+                    repositoryURL: value?.git ? prettyGitURL(value.git.url) : key,
+                    licenseUrl: null,
+                    licenseUrlIsValid: null,
+                };
+
+                if (!(queueItem.name in packageHash)) {
+                    queueItems.push(queueItem);
+                    packageHash[queueItem.name] = queueItem;
+                }
+            });
+
+            resolve(queueItems);
+        });
+    });
+};
+
+const getNPMdeps = async (logDeep: boolean) => {
+    const deps: string[] | null = await npmDepsToPaths(cwd, logDeep);
+    if (deps === null) {
+        return null;
+    }
+
+    const queueItems: QueueItem[] = [];
 
     deps.forEach((item) => {
         const queueItem: QueueItem = {
@@ -340,13 +496,12 @@ export const run = async () => {
         };
 
         if (!(queueItem.name in packageHash)) {
-            processingQueue.push(queueItem);
+            queueItems.push(queueItem);
             packageHash[queueItem.name] = queueItem;
         }
     });
 
-    console.log(colors.yellow(`Processing ${deps.length} packages.`));
-    progressBar.start(deps.length, 0);
+    return queueItems;
 };
 
 run();
