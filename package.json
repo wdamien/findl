@@ -16,6 +16,7 @@
         "url": "https://github.com/wdamien/findl.git"
     },
     "dependencies": {
+        "@octokit/rest": "^18.12.0",
         "async": "^3.2.1",
         "cli-progress": "^3.9.1",
         "colors": "^1.4.0",

@@ -10,41 +10,8 @@ import yargs from 'yargs';
 import fetch from 'node-fetch';
 import { PubspecFile, PubspecFileError } from './FlutterDeps';
 import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL } from './Utils';
-
-type GithubLicense = {
-    name: string;
-    path: string;
-    sha: string;
-    size: number;
-    url: string;
-    html_url: string;
-    git_url: string;
-    download_url: string;
-    type: string;
-    content: string;
-    encoding: string;
-    _links: Links;
-    license: License;
-};
-
-type GithubError = {
-    message: string;
-    documentation_url: string;
-};
-
-type Links = {
-    self: string;
-    git: string;
-    html: string;
-};
-
-type License = {
-    key: string;
-    name: string;
-    spdx_id: string;
-    url: string;
-    node_id: string;
-};
+import { Octokit } from '@octokit/rest';
+import { createTokenAuth } from '@octokit/auth-token';
 
 const result: QueueItem[] = [];
 let verbose: boolean = false;
@@ -74,6 +41,7 @@ const LicenseFileNames = [
     'LICENSE-MIT.txt',
 ];
 const PrimaryBranchNames = ['master', 'main'];
+let octokit: Octokit;
 
 const postCommandLog: string[] = [];
 let useGithubAPI = true;
@@ -87,15 +55,21 @@ const getRepoLicense = async (repo: string) => {
 
         if (repoPath) {
             try {
-                const licenseResult = await fetch(`https://api.github.com/repos/${repoPath}/license`);
-                const licenseResultJSON: GithubLicense | GithubError = await licenseResult.json();
-                if ('message' in licenseResultJSON) {
-                    const message = `${licenseResultJSON.message}: ${licenseResultJSON.documentation_url}`;
+                const lastSlash = repoPath.lastIndexOf('/');
+                const repoName = repoPath.substring(lastSlash+1);
+                const owner = repoPath.substr(0, lastSlash);
+                const licenseResult = await octokit.rest.licenses.getForRepo({owner, repo: repoName}).catch(e => {
+                    return e;
+                });
+
+                const licenseResultJSON = licenseResult?.data;
+                if ('message' in licenseResult) {
+                    const message = licenseResult.message;
                     if (!postCommandLog.includes(message)) {
                         postCommandLog.push(message);
                     }
                     useGithubAPI = false;
-                } else {
+                } else if (licenseResultJSON && licenseResultJSON.license) {
                     licenseUrl = licenseResultJSON.download_url;
                     if (licenseResultJSON.license.spdx_id !== 'NOASSERTION') {
                         license = licenseResultJSON.license.spdx_id;
@@ -118,7 +92,6 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
             .then((response) => response.json())
             .then(async (json: PubspecFile | PubspecFileError) => {
                 if ('error' in json) {
-                    // console.log(json.error.message);
                     return null;
                 }
                 return json;
@@ -137,7 +110,7 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
 
     if (queueItem.repositoryURL) {
         const licenseData = await getRepoLicense(queueItem.repositoryURL);
-        queueItem.license = licenseData.license;
+        queueItem.license = licenseData.license ?? undefined;
         queueItem.licenseUrl = licenseData.licenseUrl ?? queueItem.licenseUrl ?? null;
 
         // The API never gave us a URL, so look for one.
@@ -215,7 +188,6 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
                 log(queueItem, 'No local license was found. checking the web.');
 
                 const repoLicense = await getRepoLicense(queueItem.repositoryURL);
-                console.log(repoLicense);
                 if (repoLicense.license && repoLicense.licenseUrl) {
                     console.log('Found license on Github.');
                     queueItem.licenseUrlIsValid = true;
@@ -355,6 +327,15 @@ export const run = async () => {
     verbose = argv.verbose === true;
     cwd = argv.cwd;
     outPath = path.join(cwd, 'installed-packages.txt');
+
+    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    if (GITHUB_TOKEN) {
+        const auth = createTokenAuth(GITHUB_TOKEN);
+        const authentication = await auth();
+        octokit = new Octokit({auth: authentication.token});
+    } else {
+        octokit = new Octokit();
+    }
 
     const projectType = await findProjectType();
 
