@@ -8,12 +8,13 @@ import { PackageJson } from 'type-fest';
 import * as yamljs from 'yamljs';
 import yargs from 'yargs';
 import fetch from 'node-fetch';
-import { PubspecFile, PubspecFileError } from './FlutterDeps';
+import { PubspecFile, PubspecFileError } from './DartDeps';
 import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL } from './Utils';
 import { Octokit } from '@octokit/rest';
 import { createTokenAuth } from '@octokit/auth-token';
 
 const result: QueueItem[] = [];
+
 let verbose: boolean = false;
 let progressBar: cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
 let cwd: string = process.cwd();
@@ -40,11 +41,12 @@ const LicenseFileNames = [
     'LICENSE.md',
     'LICENSE-MIT.txt',
 ];
-const PrimaryBranchNames = ['master', 'main'];
+const PrimaryBranchNames = ['main', 'master'];
+
 let octokit: Octokit;
 
 const postCommandLog: string[] = [];
-let useGithubAPI = true;
+let useGithubAPI: boolean;
 
 const getRepoLicense = async (repo: string) => {
     let license, licenseUrl;
@@ -89,8 +91,8 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
 
     if (queueItem.repositoryURL?.indexOf('http') !== 0) {
         pubspecFile = await fetch(`https://pub.dev/api/packages/${queueItem.repositoryURL}`)
-            .then((response) => response.json())
-            .then(async (json: PubspecFile | PubspecFileError) => {
+            .then((response) => response.json() as PromiseLike<PubspecFile | PubspecFileError>)
+            .then((json) => {
                 if ('error' in json) {
                     return null;
                 }
@@ -117,13 +119,6 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
         if (!queueItem.licenseUrl) {
             for (let i = 0; i < LicenseFileNames.length; i++) {
                 const license = LicenseFileNames[i];
-
-                // Some urls will have not protocol, so add on https as needed.
-                queueItem.licenseUrl =
-                    queueItem.licenseUrl?.indexOf('https://') === 0
-                        ? queueItem.licenseUrl
-                        : 'https://' + queueItem.licenseUrl;
-
                 if (await validateLicenseURL(queueItem, license)) {
                     break;
                 }
@@ -146,7 +141,6 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
         queueItem.missingLicenseReason = 'no-local';
     } else {
         const packageJSON: PackageJson = await fs.readJSON(packageJsonPath);
-        // queueItem.package = packageJSON;
         queueItem.description = packageJSON.description;
         queueItem.license = packageJSON.license;
 
@@ -237,21 +231,19 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
         return queueItem.licenseUrlIsValid;
     }
 
-    let licenseUrl = null;
-
     for (let i = 0; i < PrimaryBranchNames.length; i++) {
         const primaryBranch = PrimaryBranchNames[i];
         const urlToCheck =
             PrimaryBranchNames.find((b) => queueItem.repositoryURL?.includes(`/${b}/`)) !== undefined
                 ? `${queueItem.repositoryURL}/${license}`
-                : // Gitlab and Github both use blob, whereas bitbucket uses src.
+                : // GitLab and GitHub both use blob, whereas bitbucket uses src.
                   `${queueItem.repositoryURL}/${
                       queueItem.repositoryURL?.includes('bitbucket.org') ? 'src' : 'blob'
                   }/${primaryBranch}/${license}`;
         const urlExists = await ping(urlToCheck);
         log(queueItem, `Checking url: ${urlToCheck} Exists: ${urlExists}`);
         if (urlExists !== false) {
-            licenseUrl = typeof urlExists === 'string' ? urlExists : urlToCheck;
+            const licenseUrl = typeof urlExists === 'string' ? urlExists : urlToCheck;
             queueItem.licenseUrlIsValid = licenseUrl !== null;
             queueItem.licenseUrl = licenseUrl || license;
             return true;
@@ -288,7 +280,7 @@ const log = (item: QueueItem | Error, value: string = '') => {
 
 enum DependencyType {
     node = 'node',
-    flutter = 'flutter',
+    dart = 'dart',
 }
 
 const findProjectType = async () => {
@@ -299,7 +291,7 @@ const findProjectType = async () => {
             processor: processNPMQueue,
         },
         {
-            type: DependencyType.flutter,
+            type: DependencyType.dart,
             dependenciesFile: 'pubspec.yaml',
             processor: processPubspecQueue,
         },
@@ -328,6 +320,15 @@ export const run = async () => {
     cwd = argv.cwd;
     outPath = path.join(cwd, 'installed-packages.txt');
 
+    const projectType = await findProjectType();
+
+    if (projectType === null) {
+        console.log(colors.bold(colors.red('No supported dependencies file found. Exiting.')));
+        return;
+    }
+
+    console.log(colors.bold(colors.green(`Found a ${projectType.type} project.`)));
+
     const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (GITHUB_TOKEN) {
         const auth = createTokenAuth(GITHUB_TOKEN);
@@ -336,14 +337,21 @@ export const run = async () => {
     } else {
         octokit = new Octokit();
     }
+    const requestLimit = await octokit.rateLimit.get();
+    
+    if (requestLimit.status === 200) {
+        const requestData = requestLimit.data;
+        const refreshDate = new Date(requestData.rate.reset + Date.now());
 
-    const projectType = await findProjectType();
-
-    if (projectType === null) {
-        console.log(colors.bold(colors.red('No supported dependencies file found. Exiting.')));
-        return;
+        useGithubAPI = requestData.rate.remaining > 0;
+        
+        console.log(colors.yellow(`You have ${requestData.rate.remaining} Github api requests left. They'll reset to ${requestData.rate.limit} at ${refreshDate.toLocaleDateString()} ${refreshDate.toLocaleTimeString()}`));
+        if (!GITHUB_TOKEN) {
+            console.log(colors.white("Hint: If you pass a GITHUB_TOKEN env. You'll get more requests (and more accurate results)."));
+        }
     } else {
-        console.log(colors.bold(colors.green(`Found a ${projectType.type} project.`)));
+        useGithubAPI = false;
+        console.log(colors.red('Error connecting to the GitHub api.'));
     }
 
     const processingQueue: async.QueueObject<QueueItem> = async.queue(projectType.processor, 4);
@@ -357,22 +365,18 @@ export const run = async () => {
                     return a.name < b.name ? -1 : 1;
                 })
                 .map((q) => {
-                    if (q.license) {
-                        return `${q.name} (${q.license})\n${[
-                            q.description,
-                            q.repositoryURL,
-                            q.licenseUrl,
-                        ]
-                        .filter((l) => l !== null && l !== undefined)
-                        .join('\n')}`;
-                    } else {
-                        return `${q.name} -> No license was found!`;
-                    }
+                    return `${q.name} (${q.license ?? 'no license found'})\n${[
+                        q.description,
+                        q.repositoryURL,
+                        q.licenseUrl,
+                    ]
+                    .filter((l) => l !== null && l !== undefined)
+                    .join('\n')}`;
                 })
                 .join('\n\n')
         );
-        const successful = result.filter((q) => q.licenseUrlIsValid);
-        const unsuccessful = result.filter((q) => !q.licenseUrlIsValid);
+        const successful = result.filter((q) => q.license);
+        const unsuccessful = result.filter((q) => !q.license);
 
         const successfulCount = successful.length;
         const unsuccessfulCount = unsuccessful.length;
@@ -386,18 +390,17 @@ export const run = async () => {
         console.log(colors.green(`Processed ${total} packages.`));
 
         if (total !== successfulCount) {
-            console.log(colors.yellow(`Found ${successfulCount} urls.`));
+            console.log(colors.yellow(`Found ${successfulCount} licenses.`));
         } else {
             console.log(colors.green('Found licenses for all the packages.'));
         }
 
         if (unsuccessfulCount > 0) {
-            console.log(colors.bold(colors.red(`Can\'t find ${unsuccessfulCount} license url's! Missing:`)));
-            console.log(
-                '\t' +
-                    unsuccessful
-                        .map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}: ${l.repositoryURL}`)
-                        .join('\n\t')
+            console.log(colors.bold(colors.red(`Can\'t find ${unsuccessfulCount} licenses!`)));
+            console.log('\t' +
+                unsuccessful
+                    .map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}\n\t\trepo url: ${l.repositoryURL}\n\t\tlicense url: ${l.licenseUrl}`)
+                    .join('\n\t')
             );
         }
     });
@@ -409,8 +412,8 @@ export const run = async () => {
     let deps: QueueItem[] | null = null;
     if (projectType.type === DependencyType.node) {
         deps = await getNPMdeps(logDeep);
-    } else if (projectType.type === DependencyType.flutter) {
-        deps = await getFlutterDeps();
+    } else if (projectType.type === DependencyType.dart) {
+        deps = await getDartDeps();
     }
 
     if (deps && deps.length > 0) {
@@ -422,7 +425,7 @@ export const run = async () => {
     }
 };
 
-const getFlutterDeps = async () => {
+const getDartDeps = async () => {
     return new Promise<QueueItem[]>((resolve, reject) => {
         const queueItems: QueueItem[] = [];
         yamljs.load(path.join(cwd, 'pubspec.yaml'), (pubspec) => {
@@ -443,7 +446,7 @@ const getFlutterDeps = async () => {
                 const queueItem: QueueItem = {
                     name: key,
                     parent: '',
-                    repositoryURL: value?.git ? prettyGitURL(value.git.url) : key,
+                    repositoryURL: value?.git ? prettyGitURL(value.git) : key,
                     licenseUrl: null,
                     licenseUrlIsValid: null,
                 };
