@@ -192,12 +192,10 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
                 if (!queueItem.licenseUrlIsValid) {
                     for (let i = 0; i < LicenseFileNames.length; i++) {
                         const license = LicenseFileNames[i];
-
                         // Some urls will have not protocol, so add on https as needed.
-                        queueItem.licenseUrl =
-                            queueItem.licenseUrl?.indexOf('https://') === 0
-                                ? queueItem.licenseUrl
-                                : 'https://' + queueItem.licenseUrl;
+                        queueItem.licenseUrl?.indexOf('https://') === 0 || queueItem.licenseUrl?.indexOf('node_modules') === 0
+                            ? queueItem.licenseUrl
+                            : 'https://' + queueItem.licenseUrl;
 
                         if (await validateLicenseURL(queueItem, license)) {
                             break;
@@ -347,7 +345,7 @@ export const run = async () => {
         
         console.log(colors.yellow(`You have ${requestData.rate.remaining} Github api requests left. They'll reset to ${requestData.rate.limit} at ${refreshDate.toLocaleDateString()} ${refreshDate.toLocaleTimeString()}`));
         if (!GITHUB_TOKEN) {
-            console.log(colors.white("Hint: If you pass a GITHUB_TOKEN env. You'll get more requests (and more accurate results)."));
+            console.log(colors.white("Hint: If you set a GITHUB_TOKEN env. You'll get more requests (and more accurate results)."));
         }
     } else {
         useGithubAPI = false;
@@ -365,12 +363,13 @@ export const run = async () => {
                     return a.name < b.name ? -1 : 1;
                 })
                 .map((q) => {
-                    return `${q.name} (${q.license ?? 'no license found'})\n${[
+                    const hasBrakets = q.license?.indexOf('(') === 0;
+                    return `${q.name} ${!hasBrakets?'(':''}${q.license ?? 'no license found'}${!hasBrakets?')':''}\n${[
                         q.description,
                         q.repositoryURL,
                         q.licenseUrl,
                     ]
-                    .filter((l) => l !== null && l !== undefined)
+                    .filter((l) => l !== null && l !== undefined && l !== '')
                     .join('\n')}`;
                 })
                 .join('\n\n')
@@ -397,11 +396,11 @@ export const run = async () => {
 
         if (unsuccessfulCount > 0) {
             console.log(colors.bold(colors.red(`Can\'t find ${unsuccessfulCount} licenses!`)));
-            console.log('\t' +
-                unsuccessful
-                    .map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}\n\t\trepo url: ${l.repositoryURL}\n\t\tlicense url: ${l.licenseUrl}`)
-                    .join('\n\t')
-            );
+            const missingPackages = '\t' +
+            unsuccessful
+                .map((l) => `${l.name}${l.missingLicenseReason ? formatMissingReason(l) : ''}\n\t\trepo url: ${l.repositoryURL}\n\t\tlicense url: ${l.licenseUrl}`)
+                .join('\n\t');
+            console.log(missingPackages);
         }
     });
 
@@ -446,7 +445,7 @@ const getDartDeps = async () => {
                 const queueItem: QueueItem = {
                     name: key,
                     parent: '',
-                    repositoryURL: value?.git ? prettyGitURL(value.git) : key,
+                    repositoryURL: value?.git ? prettyGitURL(value.git.url ?? value.git) : key,
                     licenseUrl: null,
                     licenseUrlIsValid: null,
                 };
