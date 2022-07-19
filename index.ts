@@ -363,8 +363,8 @@ export const run = async () => {
                     return a.name < b.name ? -1 : 1;
                 })
                 .map((q) => {
-                    const hasBrakets = q.license?.indexOf('(') === 0;
-                    return `${q.name} ${!hasBrakets?'(':''}${q.license ?? 'no license found'}${!hasBrakets?')':''}\n${[
+                    const hasBrackets = q.license?.indexOf('(') === 0;
+                    return `${q.name} ${!hasBrackets?'(':''}${q.license ?? 'no license found'}${!hasBrackets?')':''}\n${[
                         q.description,
                         q.repositoryURL,
                         q.licenseUrl,
