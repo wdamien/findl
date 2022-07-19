@@ -77,7 +77,7 @@ export const ping = async (_url: string) => {
 };
 
 export const npmDepsToPaths = async (cwd: string, deep: boolean = false) => {
-    const args = ['--prefix', cwd, 'ls', '--prod', '--json', '--depth', deep ? 'Infinity' : '0'];
+    const args = ['ls', '--prod', '--json', '--depth', deep ? 'Infinity' : '0'];
 
     const deps = await npm(cwd, args).catch(e => null);
     if (deps !== null) {
