@@ -40,6 +40,7 @@ const LicenseFileNames = [
     'License.md',
     'LICENSE.md',
     'LICENSE-MIT.txt',
+    'license-mit',
 ];
 const PrimaryBranchNames = ['main', 'master'];
 
@@ -52,7 +53,7 @@ const getRepoLicense = async (repo: string) => {
     let license, licenseUrl;
 
     if (repo && useGithubAPI) {
-        const repoPathMatch = repo.match(/https:\/\/github.com\/([^/]+\/[^/]+)/);
+        const repoPathMatch = repo.match(/^(?:https:\/\/github.com\/|github:)([^/]+\/[^/]+)/);
         const repoPath = repoPathMatch ? repoPathMatch[1] : null;
 
         if (repoPath) {
