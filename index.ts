@@ -150,6 +150,12 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
                   typeof packageJSON.repository === 'string' ? packageJSON.repository : packageJSON.repository.url
               )
             : null;
+        
+            // Monorepos might include a "directory" value, it points to the actual location of the source.
+            if ((packageJSON?.repository as any)?.directory) {
+                // Assume its in /blob/main/ some older repos might still user master, but this will catch more.
+                queueItem.repositoryURL = queueItem.repositoryURL + '/blob/main/' + (packageJSON?.repository as any)?.directory;
+            }
 
         const repoPeices = safeURL(queueItem.repositoryURL || '');
 
