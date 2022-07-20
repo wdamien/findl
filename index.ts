@@ -190,7 +190,6 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
 
                 const repoLicense = await getRepoLicense(queueItem.repositoryURL);
                 if (repoLicense.license && repoLicense.licenseUrl) {
-                    console.log('Found license on Github.');
                     queueItem.licenseUrlIsValid = true;
                     queueItem.licenseUrl = repoLicense.licenseUrl;
                     queueItem.license = repoLicense.license;
