@@ -91,7 +91,7 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
     let pubspecFile: PubspecFile | null = null;
 
     if (queueItem.repositoryURL?.indexOf('http') !== 0) {
-        pubspecFile = await fetch(`https://pub.dev/api/packages/${queueItem.repositoryURL}`)
+        pubspecFile = await fetch(`https://pub.dev/api/packages/${queueItem.name}`)
             .then((response) => response.json() as PromiseLike<PubspecFile | PubspecFileError>)
             .then((json) => {
                 if ('error' in json) {
@@ -126,6 +126,36 @@ const processPubspecQueue = async (queueItem: QueueItem, cb: () => void) => {
             }
         } else {
             queueItem.licenseUrlIsValid = true;
+        }
+    }
+    
+    // Some repos don't have their licenses setup correctly (so the API can load it), so try to scrape the pub.dev page to find it.
+    if (!queueItem.license) {
+        const html = await fetch(`https://pub.dev/packages/${queueItem.name}`).catch(e => null);
+        if (html) {
+            const licensesToCheck = [
+                'MIT',
+                'BSD-3-Clause',
+                'BSD-2-Clause',
+                'Apache-2.0',
+                'AGPL-3.0-or-later',
+                'AGPL-3.0-only',
+                'GPL-3.0-or-later',
+                'GPL-3.0-only',
+                'LGPL-3.0-or-later',
+                'LGPL-3.0-only',
+                'MPL-2.0',
+                'BSL-1.0',
+                'Unlicense'
+            ];
+            const htmlString = await html.text();
+            for (let i = 0; i < licensesToCheck.length; i++) {
+                const license = licensesToCheck[i];
+                if (new RegExp(`\\b${license}\\b`, 'g').test(htmlString)) {
+                    queueItem.license = license;
+                    break;
+                }
+            }
         }
     }
 
@@ -341,7 +371,15 @@ export const run = async () => {
     } else {
         octokit = new Octokit();
     }
-    const requestLimit = await octokit.rateLimit.get();
+    let requestLimit = await octokit.rateLimit.get().catch(e => {
+        console.log(colors.bold(colors.yellow('*** Invalid GITHUB_TOKEN.  Ignoring...')));
+        return null;
+    });
+
+    if (requestLimit === null) {
+        octokit = new Octokit();
+        requestLimit = await octokit.rateLimit.get();
+    }
     
     if (requestLimit.status === 200) {
         const requestData = requestLimit.data;

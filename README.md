@@ -16,6 +16,10 @@ Sometimes companies requires you provide all your in-use licenses for a legal au
 In your npm or dart based project.
 `findl`
 
+### Run with a GITHUB_TOKEN
+
+GITHUB_TOKEN=your_token_from_here_<https://github.com/settings/tokens> findl
+
 ## Options
 
 `--deep`
@@ -27,3 +31,7 @@ Default is `process.cwd()`
 ## Building
 
 `yarn build`
+
+## Dev'ing
+
+`yarn dev`
