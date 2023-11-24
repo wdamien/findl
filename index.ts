@@ -12,8 +12,12 @@ import { PubspecFile, PubspecFileError } from './DartDeps';
 import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL } from './Utils';
 import { Octokit } from '@octokit/rest';
 import { createTokenAuth } from '@octokit/auth-token';
+import { glob } from 'glob';
+import resolvePackagePath from 'resolve-package-path';
+import YAML from 'yaml';
 
 const result: QueueItem[] = [];
+
 
 let verbose: boolean = false;
 let progressBar: cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
@@ -187,12 +191,12 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
                 queueItem.repositoryURL = queueItem.repositoryURL + '/blob/main/' + (packageJSON?.repository as any)?.directory;
             }
 
-        const repoPeices = safeURL(queueItem.repositoryURL || '');
+        const repoPieces = safeURL(queueItem.repositoryURL || '');
 
         // Missing the repo url, so try to load its details from npm.
-        if (repoPeices.protocol === null) {
-            const npmData = await packageJson(queueItem.name, { fullMetadata: true });
-            if (npmData.repository) {
+        if (repoPieces.protocol === null) {
+            const npmData = await packageJson(queueItem.name, { fullMetadata: true }).catch(e => null);
+            if (npmData?.repository) {
                 queueItem.repositoryURL = prettyGitURL(npmData.repository.url);
             }
         }
@@ -313,27 +317,37 @@ const log = (item: QueueItem | Error, value: string = '') => {
 };
 
 enum DependencyType {
-    node = 'node',
+    npm = 'npm',
+    yarnBerry = 'yarnBerry',
     dart = 'dart',
 }
+
 
 const findProjectType = async () => {
     const supportedTypes = [
         {
-            type: DependencyType.node,
-            dependenciesFile: 'package.json',
+            type: DependencyType.yarnBerry,
+            anchorFile: '.yarnrc.yml',
+            createDependencyList: getYarnBerryDeps,
+            processor: processNPMQueue,
+        },
+        {
+            type: DependencyType.npm,
+            anchorFile: 'package.json',
+            createDependencyList: getNPMdeps,
             processor: processNPMQueue,
         },
         {
             type: DependencyType.dart,
-            dependenciesFile: 'pubspec.yaml',
+            anchorFile: 'pubspec.yaml',
+            createDependencyList: getDartDeps,
             processor: processPubspecQueue,
         },
     ];
 
     for (let i = 0; i < supportedTypes.length; i++) {
         const element = supportedTypes[i];
-        if (await fs.pathExists(path.join(cwd, element.dependenciesFile))) {
+        if (await fs.pathExists(path.join(cwd, element.anchorFile))) {
             return element;
         }
     }
@@ -452,12 +466,7 @@ export const run = async () => {
         ? { start: noop, update: noop, stop: noop }
         : new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic);
 
-    let deps: QueueItem[] | null = null;
-    if (projectType.type === DependencyType.node) {
-        deps = await getNPMdeps(logDeep);
-    } else if (projectType.type === DependencyType.dart) {
-        deps = await getDartDeps();
-    }
+    const deps: QueueItem[] | null = await projectType.createDependencyList(logDeep);
 
     if (deps && deps.length > 0) {
         processingQueue.push(deps);
@@ -528,6 +537,45 @@ const getNPMdeps = async (logDeep: boolean) => {
         }
     });
 
+    return queueItems;
+};
+
+// Only support node_modules for now.
+const getYarnBerryDeps = async () => {
+    const yarnRC = YAML.parse(fs.readFileSync(path.join(cwd, '.yarnrc.yml'), 'utf8'));
+    if (yarnRC.nodeLinker !== 'node-modules') {
+        console.log(colors.bold(colors.red('** We only support node-modules.')));
+        return [];
+    }
+    const queueItems: QueueItem[] = [];
+    // Package name id & versions.
+    const currentPackages = new Map<string, Set<string>>();
+    const packageJsons = await glob('**/package.json', { ignore: '**/node_modules/**' });
+    packageJsons.forEach((jsonPath) => {
+        // Parse out dependencies.
+        const json = JSON.parse(fs.readFileSync(path.resolve('./', jsonPath), 'utf8'));
+        for (const key in json.dependencies) {
+            if (key in json.dependencies) {
+                const version = json.dependencies[key];
+                if (!currentPackages.has(key)) {
+                    currentPackages.set(key, new Set());
+                    const modulePackageJSONPath = resolvePackagePath(key, path.dirname(jsonPath));
+                    if (modulePackageJSONPath) {
+                        const queueItem: QueueItem = {
+                            name: key,
+                            parent: path.dirname(modulePackageJSONPath),
+                            repositoryURL: null,
+                            licenseUrl: null,
+                            licenseUrlIsValid: null,
+                        };
+                        queueItems.push(queueItem);
+                    }
+                }
+                currentPackages.get(key)?.add(version);
+            }
+        }
+    });
+    
     return queueItems;
 };
 
