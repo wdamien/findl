@@ -1,7 +1,6 @@
 import * as https from 'https';
 import * as os from 'os';
 import { spawn } from 'child_process';
-import { Arguments } from 'yargs';
 
 export const noop = () => {};
 
@@ -44,7 +43,7 @@ export const safeURL = (value: string) => {
 };
 
 export const ping = async (_url: string) => {
-    return new Promise<boolean | string>((resolve, reject) => {
+    return new Promise<{result: boolean | string, status: number | undefined}>((resolve, reject) => {
         const pathParts = safeURL(_url);
         const options: https.RequestOptions = {
             hostname: pathParts.hostname,
@@ -54,22 +53,31 @@ export const ping = async (_url: string) => {
         };
 
         const req = https.request(options, (res) => {
-            switch (res.statusCode) {
-                case 200:
-                    resolve(true);
-                    break;
-                case 301:
-                case 307:
-                case 308:
-                    resolve(res.headers.location !== undefined ? res.headers.location : true);
-                    break;
-                default:
-                    resolve(false);
-            }
+            res.on('end', () => {
+                switch (res.statusCode) {
+                    case 200:
+                        resolve({result: true, status: 200});
+                        break;
+                    case 301:
+                    case 302:
+                    case 307:
+                    case 308:
+                        resolve({result: res.headers.location !== undefined ? res.headers.location : true, status: res.statusCode});
+                        break;
+                    case 404:
+                        resolve({result: false, status: res.statusCode});
+                        break;
+                    case 429:
+                        resolve({result: false, status: res.statusCode});
+                        break;
+                    default:
+                        resolve({result: false, status: res.statusCode});
+                }
+            });
         });
 
         req.on('error', (e) => {
-            resolve(false);
+            resolve({result: false, status: -1});
         });
 
         req.end();
@@ -134,4 +142,12 @@ export const walkPath = (data: any, results: any[]) => {
             }
         }
     }
+};
+
+export const wait = async (delay = 1000):Promise<void> => {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve();
+        }, delay);
+    });
 };

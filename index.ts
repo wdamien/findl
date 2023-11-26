@@ -9,7 +9,7 @@ import * as yamljs from 'yamljs';
 import yargs from 'yargs';
 import fetch from 'node-fetch';
 import { PubspecFile, PubspecFileError } from './DartDeps';
-import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL } from './Utils';
+import { noop, npmDepsToPaths, ping, prettyGitURL, safeURL, wait } from './Utils';
 import { Octokit } from '@octokit/rest';
 import { createTokenAuth } from '@octokit/auth-token';
 import { glob } from 'glob';
@@ -18,15 +18,21 @@ import YAML from 'yaml';
 
 const result: QueueItem[] = [];
 
-
 let verbose: boolean = false;
 let progressBar: cliProgress.SingleBar | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
 let cwd: string = process.cwd();
 let outPath: string;
 
 type QueueItem = {
+    // Name from the package.json
     name: string;
+
+    // Parent folder on the disk
     parent: string;
+
+    /**
+     * The main repository url.
+    */
     repositoryURL: string | null;
     license?:string;
     description?: string;
@@ -186,12 +192,13 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
             : null;
         
             // Monorepos might include a "directory" value, it points to the actual location of the source.
-            if ((packageJSON?.repository as any)?.directory) {
-                // Assume its in /blob/main/ some older repos might still user master, but this will catch more.
-                queueItem.repositoryURL = queueItem.repositoryURL + '/blob/main/' + (packageJSON?.repository as any)?.directory;
+            const directory = typeof packageJSON?.repository !== 'string'?packageJSON?.repository?.directory:null;
+            if (directory) {
+                // Main repo, according to the package.json.
+                queueItem.repositoryURL = queueItem.repositoryURL + '/blob/main/' + directory;
             }
 
-        const repoPieces = safeURL(queueItem.repositoryURL || '');
+        const repoPieces = safeURL(queueItem.repositoryURL ?? '');
 
         // Missing the repo url, so try to load its details from npm.
         if (repoPieces.protocol === null) {
@@ -264,6 +271,17 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
 
 const packageHash: Record<string, QueueItem> = {};
 
+const pingLicenseURL = async (urlToCheck: string, tryCount=0):Promise<string | boolean> => {
+    const {result, status} = await ping(urlToCheck);
+    if (typeof result === 'string') {
+        return pingLicenseURL(result, tryCount+1);
+    } else if (result === false && status === 429 && tryCount < 3) {
+        await wait(2000);
+        return pingLicenseURL(urlToCheck, tryCount+1);
+    }
+    return result;
+};
+
 const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
     if (queueItem.licenseUrlIsValid !== null) {
         return queueItem.licenseUrlIsValid;
@@ -271,21 +289,24 @@ const validateLicenseURL = async (queueItem: QueueItem, license: string) => {
 
     for (let i = 0; i < PrimaryBranchNames.length; i++) {
         const primaryBranch = PrimaryBranchNames[i];
-        const urlToCheck =
-            PrimaryBranchNames.find((b) => queueItem.repositoryURL?.includes(`/${b}/`)) !== undefined
-                ? `${queueItem.repositoryURL}/${license}`
-                : // GitLab and GitHub both use blob, whereas bitbucket uses src.
-                  `${queueItem.repositoryURL}/${
-                      queueItem.repositoryURL?.includes('bitbucket.org') ? 'src' : 'blob'
-                  }/${primaryBranch}/${license}`;
-        const urlExists = await ping(urlToCheck);
+        const repoURL = queueItem.repositoryURL;
+        const urlToCheck = PrimaryBranchNames.find((b) => repoURL?.includes(`/${b}/`)) !== undefined
+            ? `${repoURL}/${license}`
+            : // GitLab and GitHub both use blob, whereas bitbucket uses src.
+                `${repoURL}/${
+                repoURL?.includes('bitbucket.org') ? 'src' : 'blob'
+                }/${primaryBranch}/${license}`;
+    
+        const urlExists = await pingLicenseURL(urlToCheck);
         log(queueItem, `Checking url: ${urlToCheck} Exists: ${urlExists}`);
         if (urlExists !== false) {
             const licenseUrl = typeof urlExists === 'string' ? urlExists : urlToCheck;
-            queueItem.licenseUrlIsValid = licenseUrl !== null;
-            queueItem.licenseUrl = licenseUrl || license;
+            queueItem.licenseUrl = licenseUrl ?? license;
             return true;
         }
+
+        // Wait a bit before trying again. Or Github will rate limit us.
+        await wait(200);
     }
 
     return false;
@@ -302,7 +323,6 @@ const formatMissingReason = (item: QueueItem) => {
             return ' -> Cannot find a license on the web.';
     }
 };
-
 const log = (item: QueueItem | Error, value: string = '') => {
     if (verbose !== true) {
         return;
@@ -551,7 +571,7 @@ const getYarnBerryDeps = async () => {
     // Package name id & versions.
     const currentPackages = new Map<string, Set<string>>();
     const packageJsons = await glob('**/package.json', { ignore: '**/node_modules/**' });
-    packageJsons.forEach((jsonPath) => {
+    packageJsons.forEach((jsonPath: string) => {
         // Parse out dependencies.
         const json = JSON.parse(fs.readFileSync(path.resolve('./', jsonPath), 'utf8'));
         for (const key in json.dependencies) {
