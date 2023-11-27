@@ -53,7 +53,14 @@ export const ping = async (_url: string) => {
         };
 
         const req = https.request(options, (res) => {
+            const data:any[] = [];
+            res.on('data', chunk => {
+                data.push(chunk);
+            });
+
             res.on('end', () => {
+                // For testing.
+                // const resultString = Buffer.concat(data).toString();
                 switch (res.statusCode) {
                     case 200:
                         resolve({result: true, status: 200});
