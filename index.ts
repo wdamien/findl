@@ -15,7 +15,9 @@ import { createTokenAuth } from '@octokit/auth-token';
 import { glob } from 'glob';
 import resolvePackagePath from 'resolve-package-path';
 import YAML from 'yaml';
+import ignore from 'ignore';
 
+const IgnoreFileName = '.findlignore';
 const result: QueueItem[] = [];
 
 let verbose: boolean = false;
@@ -375,6 +377,18 @@ const findProjectType = async () => {
     return null;
 };
 
+const loadIgnoreFile = () => {
+    const ignoreFile = path.join(cwd, IgnoreFileName);
+    const ig = ignore();
+    if (fs.existsSync(ignoreFile)) {
+        const ignoreFileContents = fs.readFileSync(ignoreFile, 'utf8');
+        const ignoreFileLines = ignoreFileContents.split('\n');
+        ig.add(ignoreFileLines);
+        return ig;
+    }
+    return ig;
+};
+
 export const run = async () => {
     const argv = await yargs(process.argv.slice(2)).options({
         deep: { type: 'boolean', default: false },
@@ -396,6 +410,8 @@ export const run = async () => {
     }
 
     console.log(colors.bold(colors.green(`Found a ${projectType.type} project.`)));
+
+    const ignorePatterns = loadIgnoreFile();
 
     const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     if (GITHUB_TOKEN) {
@@ -486,7 +502,18 @@ export const run = async () => {
         ? { start: noop, update: noop, stop: noop }
         : new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic);
 
-    const deps: QueueItem[] | null = await projectType.createDependencyList(logDeep);
+    const ignored:string[] = [];
+    const deps: QueueItem[] = (await projectType.createDependencyList(logDeep)).filter(qi => {
+        if (ignorePatterns.ignores(qi.name)) {
+            ignored.push(qi.name);
+            return false;
+        }
+        return true;
+    });
+
+    if (ignore.length > 0) {
+        console.log(colors.yellow(`Ignoring ${ignored.length} packages:\n\t${ignored.join('\n\t')}`));
+    }
 
     if (deps && deps.length > 0) {
         processingQueue.push(deps);
@@ -537,7 +564,7 @@ const getDartDeps = async () => {
 const getNPMdeps = async (logDeep: boolean) => {
     const deps: string[] | null = await npmDepsToPaths(cwd, logDeep);
     if (deps === null) {
-        return null;
+        return [];
     }
 
     const queueItems: QueueItem[] = [];
