@@ -43,6 +43,45 @@ type QueueItem = {
     missingLicenseReason?: 'no-local' | 'no-web' | 'missing-repo';
 };
 
+const LicenseTypes = [
+    'AFL-3.0',
+    'Apache-2.0',
+    'Artistic-2.0',
+    'BSL-1.0',
+    'BSD-2-Clause',
+    'BSD-3-Clause',
+    'BSD-3-Clause-Clear',
+    'BSD-4-Clause',
+    '0BSD',
+    'CC',
+    'CC0-1.0',
+    'CC-BY-4.0',
+    'CC-BY-SA-4.0',
+    'WTFPL',
+    'ECL-2.0',
+    'EPL-1.0',
+    'EPL-2.0',
+    'EUPL-1.1',
+    'AGPL-3.0',
+    'GPL',
+    'GPL-2.0',
+    'GPL-3.0',
+    'LGPL',
+    'LGPL-2.1',
+    'LGPL-3.0',
+    'ISC',
+    'LPPL-1.3c',
+    'MS-PL',
+    'MIT',
+    'MPL-2.0',
+    'OSL-3.0',
+    'PostgreSQL',
+    'OFL-1.1',
+    'NCSA',
+    'Unlicense',
+    'Zlib',
+];
+
 const LicenseFileNames = [
     'LICENSE',
     'LICENSE.txt',
@@ -55,6 +94,10 @@ const LicenseFileNames = [
     'license-mit',
 ];
 const PrimaryBranchNames = ['main', 'master'];
+
+const validateLicenseName = (value: string | undefined) => {
+    return value && LicenseTypes.some(l => value.includes(l))?value:undefined;
+};
 
 let octokit: Octokit;
 
@@ -185,7 +228,8 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
     } else {
         const packageJSON: PackageJson = await fs.readJSON(packageJsonPath);
         queueItem.description = packageJSON.description;
-        queueItem.license = packageJSON.license;
+        queueItem.license = validateLicenseName(packageJSON.license);
+        
 
         queueItem.repositoryURL = packageJSON.repository
             ? prettyGitURL(

@@ -32,5 +32,8 @@
     "eslint.alwaysShowStatus": true,
     "eslint.lintTask.enable": true,
     "eslint.run": "onType",
-    "typescript.tsdk": "node_modules/typescript/lib"
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "cSpell.words": [
+        "pubspec"
+    ]
 }
