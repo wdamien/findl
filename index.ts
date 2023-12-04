@@ -82,6 +82,15 @@ const LicenseTypes = [
     'Zlib',
 ];
 
+// Some packages include long strings instead of the actual license.
+// Try to filter those out.
+const InvalidLicenseCharacters = [
+    '\/',
+    "'",
+    '"',
+    ':',
+];
+
 const LicenseFileNames = [
     'LICENSE',
     'LICENSE.txt',
@@ -96,7 +105,10 @@ const LicenseFileNames = [
 const PrimaryBranchNames = ['main', 'master'];
 
 const validateLicenseName = (value: string | undefined) => {
-    return value && LicenseTypes.some(l => value.includes(l))?value:undefined;
+    if (InvalidLicenseCharacters.some(c => value?.includes(c))) {
+        return undefined;
+    }
+    return LicenseTypes.some(l => value?.includes(l))?value:undefined;
 };
 
 let octokit: Octokit;
