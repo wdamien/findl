@@ -536,7 +536,7 @@ export const run = async () => {
                 })
                 .map((q) => {
                     const hasBrackets = q.license?.indexOf('(') === 0;
-                    return `### ${q.name} ${!hasBrackets?'(':''}${q.license ?? 'no license found'}${!hasBrackets?')':''}\n${[
+                    return `##### **${q.name} ${!hasBrackets?'(':''}${q.license ?? 'no license found'}${!hasBrackets?')':''}**\n${[
                         q.description,
                         wrapInMarkdownUrl(q.repositoryURL),
                         wrapInMarkdownUrl(q.licenseUrl),
