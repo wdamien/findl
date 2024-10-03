@@ -16,6 +16,7 @@ import { glob } from 'glob';
 import resolvePackagePath from 'resolve-package-path';
 import YAML from 'yaml';
 import ignore from 'ignore';
+import {URL} from 'url';
 
 const IgnoreFileName = '.findlignore';
 const result: QueueItem[] = [];
@@ -80,6 +81,7 @@ const LicenseTypes = [
     'NCSA',
     'Unlicense',
     'Zlib',
+    "Standard 'no charge'"
 ];
 
 // Some packages include long strings instead of the actual license.
@@ -104,11 +106,31 @@ const LicenseFileNames = [
 ];
 const PrimaryBranchNames = ['main', 'master'];
 
+const isAValidUrl = (s:string | null) => {
+    if (s === null) {
+        return false;
+    }
+    try {
+        new URL(s);
+        return true;
+    } catch (err) {
+        return false;
+    }
+};
+
+const wrapInMarkdownUrl = (url: string | null, text?: string) => {
+    if (isAValidUrl(url)) {
+        return `[${text ?? url}](${url})`;
+    }
+    return url;
+};
+
 const validateLicenseName = (value: string | undefined) => {
-    if (InvalidLicenseCharacters.some(c => value?.includes(c))) {
+    const l = LicenseTypes.some(l => value?.includes(l))?value:undefined;
+    if (!l && InvalidLicenseCharacters.some(c => value?.includes(c))) {
         return undefined;
     }
-    return LicenseTypes.some(l => value?.includes(l))?value:undefined;
+    return l;
 };
 
 let octokit: Octokit;
@@ -456,7 +478,7 @@ export const run = async () => {
 
     verbose = argv.verbose === true;
     cwd = argv.cwd;
-    outPath = path.join(cwd, 'installed-packages.txt');
+    outPath = path.join(cwd, 'installed-packages.md');
 
     const projectType = await findProjectType();
 
@@ -514,10 +536,10 @@ export const run = async () => {
                 })
                 .map((q) => {
                     const hasBrackets = q.license?.indexOf('(') === 0;
-                    return `${q.name} ${!hasBrackets?'(':''}${q.license ?? 'no license found'}${!hasBrackets?')':''}\n${[
+                    return `### ${q.name} ${!hasBrackets?'(':''}${q.license ?? 'no license found'}${!hasBrackets?')':''}\n${[
                         q.description,
-                        q.repositoryURL,
-                        q.licenseUrl,
+                        wrapInMarkdownUrl(q.repositoryURL),
+                        wrapInMarkdownUrl(q.licenseUrl),
                     ]
                     .filter((l) => l !== null && l !== undefined && l !== '')
                     .join('\n')}`;
