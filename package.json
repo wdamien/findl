@@ -1,6 +1,6 @@
 {
     "name": "findl",
-    "version": "0.5.3",
+    "version": "0.6.0",
     "description": "Output all the third-party licenses used in your node or dart based project.",
     "main": "lib/index.js",
     "bin": {
@@ -43,7 +43,7 @@
         "eslint": "^7.22.0",
         "ts-loader": "^9.2.6",
         "type-fest": "^2.5.1",
-        "typescript": "^4.4.4",
+        "typescript": "^5.8.3",
         "webpack": "^5.62.1",
         "webpack-cli": "^4.9.1"
     }

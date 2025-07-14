@@ -1,15 +1,8 @@
 {
-    "ts-node": {
-        // these options are overrides used only by ts-node
-        // same as our --compilerOptions flag and our TS_NODE_COMPILER_OPTIONS environment variable
-        "compilerOptions": {
-            "module": "commonjs"
-        }
-    },
     "compilerOptions": {
         "baseUrl": ".",
-        "target": "es5",
-        "module": "esnext",
+        "target": "es2020",
+        "module": "es2020",
         "moduleResolution": "node",
         "downlevelIteration": true,
         "allowJs": false,
