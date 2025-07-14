@@ -766,9 +766,9 @@ export const run = async () => {
     if (ignore.length > 0) {
         console.log(
             colors.yellow(
-                `Ignoring ${ignored.length} packages:\n\t${ignored.join(
-                    '\n\t'
-                )}`
+                `Ignoring ${ignored.length} packages:\n\t${ignored
+                    .sort()
+                    .join('\n\t')}`
             )
         );
     }
