@@ -8,7 +8,7 @@
     },
     "scripts": {
         "build": "webpack",
-        "dev": "npx ts-node-dev ./index.ts"
+        "dev": "npx tsx ./index.ts"
     },
     "author": "wdamien",
     "license": "MIT",
@@ -17,7 +17,7 @@
         "url": "https://github.com/gskinnerTeam/findl"
     },
     "dependencies": {
-        "@octokit/rest": "^18.12.0",
+        "@octokit/rest": "^22.0.0",
         "async": "^3.2.3",
         "cli-progress": "^3.10.0",
         "colors": "^1.4.0",

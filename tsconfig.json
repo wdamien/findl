@@ -1,28 +1,27 @@
 {
-  "ts-node": {
-    // these options are overrides used only by ts-node
-    // same as our --compilerOptions flag and our TS_NODE_COMPILER_OPTIONS environment variable
+    "ts-node": {
+        // these options are overrides used only by ts-node
+        // same as our --compilerOptions flag and our TS_NODE_COMPILER_OPTIONS environment variable
+        "compilerOptions": {
+            "module": "commonjs"
+        }
+    },
     "compilerOptions": {
-      "module": "commonjs"
-    }
-  },  
-  "compilerOptions": {
-      "baseUrl": ".",
-      "target": "es5",
-      "module": "esnext",
-      "moduleResolution": "node",
-      "downlevelIteration": true,
-      "allowJs": false,
-      "skipLibCheck": true,
-      "esModuleInterop": true,
-      "allowSyntheticDefaultImports": true,
-      "strict": true,
-      "forceConsistentCasingInFileNames": true,
-      "noEmit": false,
-      "noFallthroughCasesInSwitch": true,
-      "allowUnreachableCode": false
-  },
-  "exclude": [
-    "node_modules",
-  ]
+        "baseUrl": ".",
+        "target": "es5",
+        "module": "esnext",
+        "moduleResolution": "node",
+        "downlevelIteration": true,
+        "allowJs": false,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "noEmit": false,
+        "resolveJsonModule": true,
+        "noFallthroughCasesInSwitch": true,
+        "allowUnreachableCode": false
+    },
+    "exclude": ["node_modules"]
 }
