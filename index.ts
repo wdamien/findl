@@ -89,7 +89,7 @@ const LicenseFileNames = [
 ];
 const PrimaryBranchNames = ['main', 'master'];
 
-const isValidUrl = (s: string | null) => {
+const isValidUrl = (s: string | null): s is string => {
     if (s === null) {
         return false;
     }
