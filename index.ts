@@ -25,7 +25,6 @@ import YAML from 'yaml';
 import ignore from 'ignore';
 import { URL } from 'url';
 import LicenseTypes from './licenses.json';
-import { exit } from 'process';
 
 const IgnoreFileName = '.findlignore';
 const result: QueueItem[] = [];
