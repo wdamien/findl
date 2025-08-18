@@ -37,6 +37,7 @@ const queueItemStub: QueueItem = Object.freeze({
     mainRepositoryURL: null,
     licenseUrl: null,
     licenseUrlIsValid: null,
+    licenseIsValid: null,
 });
 
 // Cache the licenses, so we don't have to keep hitting the API.
@@ -69,6 +70,7 @@ type QueueItem = {
     description?: string;
     licenseUrl: string | null;
     licenseUrlIsValid: boolean | null;
+    licenseIsValid: boolean | null;
     missingLicenseReason?: 'no-local' | 'no-web' | 'missing-repo';
 };
 
@@ -340,20 +342,24 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
 
         if (queueItem.repositoryURL) {
             // Run in variety of lookups to find our license, in ascending order of resource use / likelihood to succeed.
+            const hasMainRepoURL =
+                queueItem.mainRepositoryURL !== queueItem.repositoryURL;
             const checks = [
                 { cb: checkFSForNPMLicense, url: queueItem.repositoryURL },
                 { cb: checkAPIForLicense, url: queueItem.repositoryURL },
-                queueItem.mainRepositoryURL !== queueItem.repositoryURL
+                hasMainRepoURL
                     ? {
                           cb: checkAPIForLicense,
                           url: queueItem.mainRepositoryURL,
                       }
                     : null,
                 { cb: checkGITHostForLicense, url: queueItem.repositoryURL },
-                {
-                    cb: checkGITHostForLicense,
-                    url: queueItem.mainRepositoryURL,
-                },
+                hasMainRepoURL
+                    ? {
+                          cb: checkGITHostForLicense,
+                          url: queueItem.mainRepositoryURL,
+                      }
+                    : null,
             ];
 
             for (let i = 0; i < checks.length; i++) {
@@ -366,12 +372,19 @@ const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
                     continue;
                 }
 
-                // Not every method uses parent, but does't hurt to pass.
+                // Not every method uses parent, but doesn't hurt to pass.
                 const result = await cb(url, queueItem.parent);
-                if (result?.license) {
+                if (result?.licenseUrl) {
                     queueItem.licenseUrl = result.licenseUrl;
-                    queueItem.license = result.license;
                     queueItem.licenseUrlIsValid = true;
+                }
+
+                if (result?.license) {
+                    queueItem.license = result.license;
+                    queueItem.licenseIsValid = true;
+                }
+
+                if (queueItem.licenseIsValid && queueItem.licenseUrlIsValid) {
                     break;
                 }
             }
@@ -504,7 +517,7 @@ const validateLicenseURL = async (
         }
 
         const urlExists = await pingRequest;
-        // log(queueItem, `Checking url: ${urlToCheck} Exists: ${urlExists}`);
+        // log(`Checking url: ${urlToCheck} Exists: ${urlExists}`);
         if (urlExists !== false) {
             return { licenseUrl: urlToCheck, license: null };
         }
