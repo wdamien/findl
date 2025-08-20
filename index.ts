@@ -695,6 +695,8 @@ export const run = async () => {
     processingQueue.drain(() => {
         progressBar.stop();
 
+        // Note the 2 spaces before each newline, its to prevent GitHub from removing them in their preview.
+        // Details: https://stackoverflow.com/a/51125093
         fs.writeFile(
             outPath,
             result
@@ -705,7 +707,7 @@ export const run = async () => {
                     const hasBrackets = q.license?.indexOf('(') === 0;
                     return `##### **${q.name} ${!hasBrackets ? '(' : ''}${
                         q.license ?? 'no license found'
-                    }${!hasBrackets ? ')' : ''}**\n${[
+                    }${!hasBrackets ? ')' : ''}**  \n\n${[
                         q.description,
                         wrapInMarkdownUrl(q.repositoryURL),
                         wrapInMarkdownUrl(q.licenseUrl),
@@ -713,9 +715,9 @@ export const run = async () => {
                         .filter(
                             (l) => l !== null && l !== undefined && l !== ''
                         )
-                        .join('\n')}`;
+                        .join('  \n')}`;
                 })
-                .join('\n\n')
+                .join('  \n\n')
         );
         const successful = result.filter((q) => q.license);
         const unsuccessful = result.filter((q) => !q.license);
