@@ -1,7 +1,20 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
+    test: {
+        globals: true,
+        environment: 'node',
+        setupFiles: ['./tests/setup.ts'],
+        include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+        exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/lib/**',
+            '**/findl-tests/**',
+        ],
+    },
     build: {
         lib: {
             entry: resolve(__dirname, 'index.ts'),
