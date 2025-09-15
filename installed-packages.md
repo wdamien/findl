@@ -22,12 +22,6 @@ get colors in your node.js console
 [http://github.com/Marak/colors.js](http://github.com/Marak/colors.js)  
 [http://github.com/Marak/colors.js/blob/master/LICENSE](http://github.com/Marak/colors.js/blob/master/LICENSE)  
 
-##### **findl (MIT)**  
-
-Output all the third-party licenses used in your node or dart based project.  
-[https://github.com/gskinnerTeam/findl](https://github.com/gskinnerTeam/findl)  
-[https://github.com/gskinnerTeam/findl/blob/main/LICENSE](https://github.com/gskinnerTeam/findl/blob/main/LICENSE)  
-
 ##### **fs-extra (MIT)**  
 
 fs-extra contains methods that aren't included in the vanilla Node.js fs package. Such as recursive mkdir, copy, and remove.  

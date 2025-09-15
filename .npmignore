@@ -1,6 +1,7 @@
 .vscode
 yarn.lock
-webpack.config.js
+vite.config.ts
 tsconfig.json
 index.ts
+src/
 .eslintrc.json

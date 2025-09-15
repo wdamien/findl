@@ -7,8 +7,9 @@
         "findl": "./bin/findl.js"
     },
     "scripts": {
-        "build": "webpack",
-        "dev": "npx tsx ./index.ts"
+        "build": "vite build",
+        "dev": "npx tsx ./index.ts",
+        "prepublishOnly": "yarn build"
     },
     "author": "wdamien",
     "license": "MIT",
@@ -35,16 +36,15 @@
         "@types/async": "^3.2.12",
         "@types/cli-progress": "^3.9.2",
         "@types/fs-extra": "^9.0.13",
+        "@types/node": "^24.4.0",
         "@types/node-fetch": "^2.6.1",
         "@types/yamljs": "^0.2.31",
         "@types/yargs": "^17.0.10",
         "@typescript-eslint/eslint-plugin": "^4.19.0",
         "@typescript-eslint/parser": "^4.19.0",
         "eslint": "^7.22.0",
-        "ts-loader": "^9.2.6",
         "type-fest": "^2.5.1",
         "typescript": "^5.8.3",
-        "webpack": "^5.62.1",
-        "webpack-cli": "^4.9.1"
+        "vite": "^7.1.5"
     }
 }
