@@ -136,6 +136,7 @@ export const processPubspecQueue = async (
         const html = await fetch(
             `https://pub.dev/packages/${queueItem.name}`
         ).catch((e) => null);
+
         if (html) {
             const licensesToCheck = [
                 'MIT',
@@ -151,12 +152,21 @@ export const processPubspecQueue = async (
                 'MPL-2.0',
                 'BSL-1.0',
                 'Unlicense',
+                'unknown \\(',
             ];
             const htmlString = await html.text();
             for (let i = 0; i < licensesToCheck.length; i++) {
                 const license = licensesToCheck[i];
-                if (new RegExp(`\\b${license}\\b`, 'g').test(htmlString)) {
-                    queueItem.license = license;
+                const ignoreBoundary = license.endsWith('(');
+                if (
+                    new RegExp(
+                        `\\b${license}${ignoreBoundary ? '' : '\\b'}`,
+                        'g'
+                    ).test(htmlString)
+                ) {
+                    queueItem.license = ignoreBoundary
+                        ? license.substring(0, license.lastIndexOf(' '))
+                        : license;
                     break;
                 }
             }
