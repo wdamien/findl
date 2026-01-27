@@ -43,7 +43,10 @@ export const safeURL = (value: string) => {
 };
 
 export const ping = async (_url: string) => {
-    return new Promise<{result: boolean | string, status: number | undefined}>((resolve, reject) => {
+    return new Promise<{
+        result: boolean | string;
+        status: number | undefined;
+    }>((resolve, reject) => {
         const pathParts = safeURL(_url);
         const options: https.RequestOptions = {
             hostname: pathParts.hostname,
@@ -53,8 +56,8 @@ export const ping = async (_url: string) => {
         };
 
         const req = https.request(options, (res) => {
-            const data:any[] = [];
-            res.on('data', chunk => {
+            const data: Uint8Array<ArrayBufferLike>[] = [];
+            res.on('data', (chunk) => {
                 data.push(chunk);
             });
 
@@ -63,38 +66,44 @@ export const ping = async (_url: string) => {
                 // const resultString = Buffer.concat(data).toString();
                 switch (res.statusCode) {
                     case 200:
-                        resolve({result: true, status: 200});
+                        resolve({ result: true, status: 200 });
                         break;
                     case 301:
                     case 302:
                     case 307:
                     case 308:
-                        resolve({result: res.headers.location !== undefined ? res.headers.location : true, status: res.statusCode});
+                        resolve({
+                            result:
+                                res.headers.location !== undefined
+                                    ? res.headers.location
+                                    : true,
+                            status: res.statusCode,
+                        });
                         break;
                     case 404:
-                        resolve({result: false, status: res.statusCode});
+                        resolve({ result: false, status: res.statusCode });
                         break;
                     case 429:
-                        resolve({result: false, status: res.statusCode});
+                        resolve({ result: false, status: res.statusCode });
                         break;
                     default:
-                        resolve({result: false, status: res.statusCode});
+                        resolve({ result: false, status: res.statusCode });
                 }
             });
         });
 
         req.on('error', (e) => {
-            resolve({result: false, status: -1});
+            resolve({ result: false, status: -1 });
         });
 
         req.end();
     });
 };
 
-export const npmDepsToPaths = async (cwd: string, deep: boolean = false) => {
+export const npmDepsToPaths = async (cwd: string, deep = false) => {
     const args = ['ls', '--prod', '--json', '--depth', deep ? 'Infinity' : '0'];
 
-    const deps = await npm(cwd, args).catch(e => null);
+    const deps = await npm(cwd, args).catch((e) => null);
     if (deps !== null) {
         const result = safeParseJSON(deps);
         const packagePaths: string[] = [];
@@ -120,7 +129,11 @@ const safeParseJSON = (value: string) => {
 const npm = (cwd: string, args: string[]) => {
     return new Promise<string>((resolve, reject) => {
         try {
-            const npm = spawn(`npm${os.platform() === 'win32'?'.cmd':''}`, args, { cwd });
+            const npm = spawn(
+                `npm${os.platform() === 'win32' ? '.cmd' : ''}`,
+                args,
+                { cwd },
+            );
             const buffer: Buffer[] = [];
             npm.stdout.on('data', (data) => {
                 buffer.push(data);
@@ -135,8 +148,10 @@ const npm = (cwd: string, args: string[]) => {
     });
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const walkPath = (data: any, results: any[]) => {
+type Node<T> = Record<string, { dependencies: T }>;
+interface Dependency extends Node<Dependency> {}
+
+export const walkPath = (data: Dependency, results: string[]) => {
     for (const key in data) {
         if (Object.prototype.hasOwnProperty.call(data, key)) {
             const module = data[key];
@@ -151,7 +166,7 @@ export const walkPath = (data: any, results: any[]) => {
     }
 };
 
-export const wait = async (delay = 1000):Promise<void> => {
+export const wait = async (delay = 1000): Promise<void> => {
     return new Promise((resolve) => {
         setTimeout(() => {
             resolve();

@@ -4,4 +4,5 @@ vite.config.ts
 tsconfig.json
 index.ts
 src/
-.eslintrc.json
+biome.json
+installed-packages.md

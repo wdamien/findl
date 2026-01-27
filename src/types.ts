@@ -1,3 +1,5 @@
+import * as cliProgress from 'cli-progress';
+
 export type QueueItem = {
     // Name from the package.json
     name: string;
@@ -35,3 +37,8 @@ export type ProjectType = {
     createDependencyList: (logDeep?: boolean) => Promise<QueueItem[]>;
     processor: (queueItem: QueueItem, cb: () => void) => Promise<void>;
 };
+
+export type ProgressBar = Pick<
+    cliProgress.SingleBar,
+    'start' | 'stop' | 'update'
+>;

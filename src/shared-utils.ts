@@ -1,20 +1,19 @@
-import * as fs from 'fs-extra';
-import * as path from 'path';
+import type { Octokit } from '@octokit/rest';
 import colors from 'colors/safe';
+import * as fs from 'fs-extra';
 import ignore from 'ignore';
-import { Octokit } from '@octokit/rest';
+import * as path from 'path';
 import { URL } from 'url';
-import { QueueItem, LicenseResult, DependencyType, ProjectType } from './types';
 import {
     IgnoreFileName,
     InvalidLicenseCharacters,
-    LicenseFileNames,
     PrimaryBranchNames,
 } from './constants';
-import { ping, wait } from './Utils';
 import LicenseTypes from './licenses.json';
+import { LicenseResult, ProjectType, QueueItem } from './types';
+import { ping, wait } from './Utils';
 
-let verbose: boolean = false;
+let verbose = false;
 let cwd: string = process.cwd();
 let octokit: Octokit;
 let useGithubAPI: boolean;
@@ -42,7 +41,7 @@ export const isValidUrl = (s: string | null): s is string => {
     try {
         new URL(s);
         return true;
-    } catch (err) {
+    } catch (_: unknown) {
         return false;
     }
 };
@@ -68,11 +67,12 @@ const octokitRestLicensesRequests = new Map<
 >();
 
 export const getLicenseFromRepository = async (repo: string) => {
-    let license, licenseUrl;
+    let license: string | null = null;
+    let licenseUrl: string | null = null;
 
     if (repo && useGithubAPI) {
         const repoPathMatch = repo.match(
-            /^(?:https:\/\/github.com\/|github:)([^/]+\/[^/]+)/
+            /^(?:https:\/\/github.com\/|github:)([^/]+\/[^/]+)/,
         );
         const repoPath = repoPathMatch ? repoPathMatch[1] : null;
 
@@ -83,7 +83,9 @@ export const getLicenseFromRepository = async (repo: string) => {
             const requestKey = `${owner}/${repoName}`;
             const hasPreviousRequest =
                 octokitRestLicensesRequests.has(requestKey);
-            let licenseRequest;
+            let licenseRequest:
+                | ReturnType<typeof octokit.rest.licenses.getForRepo>
+                | undefined;
             if (hasPreviousRequest === false) {
                 licenseRequest = octokit.rest.licenses
                     .getForRepo({ owner, repo: repoName })
@@ -95,18 +97,26 @@ export const getLicenseFromRepository = async (repo: string) => {
                 licenseRequest = octokitRestLicensesRequests.get(requestKey);
             }
 
+            if (!licenseRequest) {
+                throw new Error('Missing licenseRequest');
+            }
+
             const licenseResult = await licenseRequest;
 
             const licenseResultJSON = licenseResult?.data;
-            if ('status' in licenseResult && licenseResult.status !== 200) {
+            if (
+                licenseResultJSON &&
+                'status' in licenseResult &&
+                licenseResult.status !== 200
+            ) {
                 !hasPreviousRequest &&
                     verbose &&
                     log(
                         colors.yellow(
                             `octokit [${licenseResult.status}] ${
-                                licenseResult.response.url
-                            } ${JSON.stringify(licenseResult.response.data)}`
-                        )
+                                licenseResult.url
+                            } ${JSON.stringify(licenseResultJSON)}`,
+                        ),
                     );
             } else if (licenseResultJSON && licenseResultJSON.license) {
                 licenseUrl = licenseResultJSON.html_url;
@@ -122,7 +132,7 @@ export const getLicenseFromRepository = async (repo: string) => {
 
 const pingLicenseURL = async (
     urlToCheck: string,
-    tryCount = 0
+    tryCount = 0,
 ): Promise<string | boolean> => {
     const { result, status } = await ping(urlToCheck);
     if (typeof result === 'string') {
@@ -138,7 +148,7 @@ const pingRequests = new Map<string, ReturnType<typeof pingLicenseURL>>();
 
 export const validateLicenseURL = async (
     repoURL: string,
-    license: string
+    license: string,
 ): Promise<LicenseResult | null> => {
     for (let i = 0; i < PrimaryBranchNames.length; i++) {
         const primaryBranch = PrimaryBranchNames[i];
@@ -186,7 +196,7 @@ export const formatMissingReason = (item: QueueItem) => {
 
 export const log = (
     item: QueueItem | Error | string,
-    _value: string | object = ''
+    _value: string | object = '',
 ) => {
     if (verbose !== true) {
         return;
@@ -216,7 +226,7 @@ export const loadIgnoreFile = () => {
 };
 
 export const findProjectType = async (
-    supportedTypes: ProjectType[]
+    supportedTypes: ProjectType[],
 ): Promise<ProjectType | null> => {
     for (let i = 0; i < supportedTypes.length; i++) {
         const element = supportedTypes[i];

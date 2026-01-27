@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as yamljs from 'yamljs';
 import fetch from 'node-fetch';
-import { QueueItem } from './types';
+import { ProgressBar, QueueItem } from './types';
 import { queueItemStub } from './constants';
 import {
     getLicenseFromRepository,
@@ -19,7 +19,7 @@ const dartLicenseCache = new Map<
 >();
 
 let cwd: string = process.cwd();
-let progressBar: any;
+let progressBar: ProgressBar;
 let result: QueueItem[] = [];
 
 export const setDartProcessorCwd = (value: string) => {
@@ -27,7 +27,7 @@ export const setDartProcessorCwd = (value: string) => {
     setCwd(value);
 };
 
-export const setDartProgressBar = (bar: any) => {
+export const setDartProgressBar = (bar: ProgressBar) => {
     progressBar = bar;
 };
 
@@ -47,7 +47,7 @@ const isFlutterRepo = (queueItem: QueueItem) => {
 
 export const processPubspecQueue = async (
     queueItem: QueueItem,
-    cb: () => void
+    cb: () => void,
 ) => {
     let pubspecFile: PubspecFile | null = null;
 
@@ -55,13 +55,13 @@ export const processPubspecQueue = async (
         queueItem.repositoryURL = 'https://github.com/flutter/flutter/';
     } else if (queueItem.repositoryURL?.indexOf('http') !== 0) {
         pubspecFile = await fetch(
-            `https://pub.dev/api/packages/${queueItem.name}`
+            `https://pub.dev/api/packages/${queueItem.name}`,
         )
             .then(
                 (response) =>
                     response.json().catch((e) => ({
                         error: 'Invalid JSON',
-                    })) as PromiseLike<PubspecFile | PubspecFileError>
+                    })) as PromiseLike<PubspecFile | PubspecFileError>,
             )
             .then((json) => {
                 if ('error' in json) {
@@ -91,7 +91,7 @@ export const processPubspecQueue = async (
             queueItem.licenseUrl = cachedLicense?.licenseUrl ?? '';
         } else {
             const licenseData = await getLicenseFromRepository(
-                queueItem.repositoryURL
+                queueItem.repositoryURL,
             );
             queueItem.license = licenseData?.license ?? undefined;
             queueItem.licenseUrl =
@@ -113,7 +113,7 @@ export const processPubspecQueue = async (
                     const licenseFileName = LicenseFileNames[i];
                     const licenseResult = await validateLicenseURL(
                         queueItem.repositoryURL,
-                        licenseFileName
+                        licenseFileName,
                     );
                     if (licenseResult !== null) {
                         queueItem.licenseUrl = licenseResult.licenseUrl;
@@ -134,7 +134,7 @@ export const processPubspecQueue = async (
     // Some repos don't have their licenses setup correctly (so the API can load it), so try to scrape the pub.dev page to find it.
     if (!queueItem.license) {
         const html = await fetch(
-            `https://pub.dev/packages/${queueItem.name}`
+            `https://pub.dev/packages/${queueItem.name}`,
         ).catch((e) => null);
 
         if (html) {
@@ -161,7 +161,7 @@ export const processPubspecQueue = async (
                 if (
                     new RegExp(
                         `\\b${license}${ignoreBoundary ? '' : '\\b'}`,
-                        'g'
+                        'g',
                     ).test(htmlString)
                 ) {
                     queueItem.license = ignoreBoundary
@@ -209,8 +209,8 @@ export const getDartDeps = async () => {
                         ? typeof value.git === 'string'
                             ? value.git
                             : value.git.url
-                            ? prettyGitURL(value.git.url)
-                            : ''
+                              ? prettyGitURL(value.git.url)
+                              : ''
                         : key,
                 };
 

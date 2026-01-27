@@ -6,7 +6,7 @@ import { glob } from 'glob';
 import resolvePackagePath from 'resolve-package-path';
 import YAML from 'yaml';
 import colors from 'colors/safe';
-import { QueueItem, LicenseResult } from './types';
+import { QueueItem, LicenseResult, ProgressBar } from './types';
 import { queueItemStub, LicenseFileNames } from './constants';
 import {
     validateLicenseName,
@@ -18,7 +18,7 @@ import {
 import { prettyGitURL, safeURL, npmDepsToPaths } from './Utils';
 
 let cwd: string = process.cwd();
-let progressBar: any;
+let progressBar: ProgressBar;
 let result: QueueItem[] = [];
 
 export const setNodeProcessorCwd = (value: string) => {
@@ -26,7 +26,7 @@ export const setNodeProcessorCwd = (value: string) => {
     setCwd(value);
 };
 
-export const setNodeProgressBar = (bar: any) => {
+export const setNodeProgressBar = (bar: ProgressBar) => {
     progressBar = bar;
 };
 
@@ -48,7 +48,7 @@ export const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
             ? prettyGitURL(
                   typeof packageJSON.repository === 'string'
                       ? packageJSON.repository
-                      : packageJSON.repository.url
+                      : packageJSON.repository.url,
               )
             : null;
         queueItem.repositoryURL = queueItem.mainRepositoryURL;
@@ -145,7 +145,7 @@ export const processNPMQueue = async (queueItem: QueueItem, cb: () => void) => {
 
 const checkFSForNPMLicense = async (
     repositoryURL: string,
-    parent: string
+    parent: string,
 ): Promise<LicenseResult | null> => {
     log('checkFSForNPMLicense', { repositoryURL, parent });
     // Case matters here. So we manually do a strict equality check to see if the file exists.
@@ -158,14 +158,14 @@ const checkFSForNPMLicense = async (
         if (pathExists) {
             const licenseUrl = await validateLicenseURL(
                 repositoryURL,
-                licenseFileName
+                licenseFileName,
             );
             if (licenseUrl === null) {
                 // Couldn't validate the url, so just point to the local one.
                 return {
                     licenseUrl: path.join(
                         path.relative(cwd, parent),
-                        licenseFileName
+                        licenseFileName,
                     ),
                     license: null,
                 };
@@ -178,7 +178,7 @@ const checkFSForNPMLicense = async (
 };
 
 const checkAPIForLicense = async (
-    repositoryURL: string
+    repositoryURL: string,
 ): Promise<LicenseResult | null> => {
     log('checkAPIForLicense', repositoryURL);
 
@@ -193,7 +193,7 @@ const checkAPIForLicense = async (
 };
 
 const checkGITHostForLicense = async (
-    repositoryURL: string
+    repositoryURL: string,
 ): Promise<LicenseResult | null> => {
     log('checkGITHostForLicense', repositoryURL);
     for (let i = 0; i < LicenseFileNames.length; i++) {
@@ -206,7 +206,7 @@ const checkGITHostForLicense = async (
     return null;
 };
 
-export const getNPMdeps = async (logDeep: boolean = false) => {
+export const getNPMdeps = async (logDeep = false) => {
     const deps: string[] | null = await npmDepsToPaths(cwd, logDeep);
     if (deps === null) {
         return [];
@@ -234,22 +234,22 @@ export const getNPMdeps = async (logDeep: boolean = false) => {
 // Only support node_modules for now.
 export const getYarnBerryDeps = async () => {
     const yarnRC = YAML.parse(
-        fs.readFileSync(path.join(cwd, '.yarnrc.yml'), 'utf8')
+        fs.readFileSync(path.join(cwd, '.yarnrc.yml'), 'utf8'),
     );
     if (yarnRC.nodeLinker !== 'node-modules') {
         console.log(
-            colors.bold(colors.red('** We only support node-modules.'))
+            colors.bold(colors.red('** We only support node-modules.')),
         );
         return [];
     }
     const queueItems: QueueItem[] = [];
     // Package name id & versions.
     const currentPackages = new Map<string, Set<string>>();
-    const packageJsons = await glob('**/package.json', {
+    const packageJsonList = await glob('**/package.json', {
         ignore: '**/node_modules/**',
         cwd,
     });
-    packageJsons.forEach((jsonBasePath: string) => {
+    packageJsonList.forEach((jsonBasePath: string) => {
         // Parse out dependencies.
         const resolvedJsonPath = path.resolve(cwd, jsonBasePath);
         const json = JSON.parse(fs.readFileSync(resolvedJsonPath, 'utf8'));
@@ -260,7 +260,7 @@ export const getYarnBerryDeps = async () => {
                     currentPackages.set(key, new Set());
                     const modulePackageJSONPath = resolvePackagePath(
                         key,
-                        path.dirname(resolvedJsonPath)
+                        path.dirname(resolvedJsonPath),
                     );
                     if (modulePackageJSONPath) {
                         const queueItem: QueueItem = {

@@ -9,27 +9,8 @@
     // Turn off tsc task auto detection since we have the necessary tasks as npm scripts
     "typescript.tsc.autoDetect": "off",
     "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "explicit",
         "source.organizeImports": "never"
     },
-    "spellright.language": ["en"],
-    "spellright.documentTypes": [
-        "markdown",
-        "plaintext",
-        "typescript",
-        "javascript"
-    ],
-    "spellright.ignoreRegExpsByClass": {
-        "markdown": ["/&amp;/g", "/&nbsp;/g"],
-        "typescript": ["/#([a-f0-9]){6,8}/g"],
-        "typescriptreact": ["/#([a-f0-9]){6,8}/g"],
-        "html": ["/<script>[^]*?</script>/gm"]
-    },
-    "spellright.notificationClass": "warning",
-    "eslint.format.enable": true,
-    "eslint.alwaysShowStatus": true,
-    "eslint.lintTask.enable": true,
-    "eslint.run": "onType",
     "typescript.tsdk": "node_modules/typescript/lib",
     "cSpell.words": ["pubspec"]
 }

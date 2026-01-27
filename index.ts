@@ -6,7 +6,12 @@ import * as path from 'path';
 import yargs from 'yargs';
 import { Octokit } from '@octokit/rest';
 import { createTokenAuth } from '@octokit/auth-token';
-import { QueueItem, DependencyType, ProjectType } from './src/types';
+import {
+    QueueItem,
+    DependencyType,
+    ProjectType,
+    ProgressBar,
+} from './src/types';
 import {
     setVerbose,
     setCwd,
@@ -36,10 +41,8 @@ import { noop } from './src/Utils';
 
 const result: QueueItem[] = [];
 
-let verbose: boolean = false;
-let progressBar:
-    | cliProgress.SingleBar
-    | Pick<cliProgress.SingleBar, 'start' | 'stop' | 'update'>;
+let verbose = false;
+let progressBar: ProgressBar;
 let cwd: string = process.cwd();
 let outPath: string;
 let octokit: Octokit;
@@ -92,14 +95,14 @@ export const run = async () => {
     if (projectType === null) {
         console.log(
             colors.bold(
-                colors.red('No supported dependencies file found. Exiting.')
-            )
+                colors.red('No supported dependencies file found. Exiting.'),
+            ),
         );
         return;
     }
 
     console.log(
-        colors.bold(colors.green(`Found a ${projectType.type} project.`))
+        colors.bold(colors.green(`Found a ${projectType.type} project.`)),
     );
 
     const ignorePatterns = loadIgnoreFile();
@@ -122,7 +125,9 @@ export const run = async () => {
 
     let requestLimit = await octokit.rateLimit.get().catch((e) => {
         console.log(
-            colors.bold(colors.yellow('*** Invalid GITHUB_TOKEN.  Ignoring...'))
+            colors.bold(
+                colors.yellow('*** Invalid GITHUB_TOKEN.  Ignoring...'),
+            ),
         );
         return null;
     });
@@ -139,15 +144,15 @@ export const run = async () => {
 
         console.log(
             colors.yellow(
-                `You have ${remaining} Github api requests left. They'll reset to ${limit} at ${refreshDate.toLocaleDateString()} ${refreshDate.toLocaleTimeString()}`
-            )
+                `You have ${remaining} Github api requests left. They'll reset to ${limit} at ${refreshDate.toLocaleDateString()} ${refreshDate.toLocaleTimeString()}`,
+            ),
         );
 
         if (!GITHUB_TOKEN) {
             console.log(
                 colors.white(
-                    "Hint: If you set a GITHUB_TOKEN env. You'll get more requests (and more accurate results)."
-                )
+                    "Hint: If you set a GITHUB_TOKEN env. You'll get more requests (and more accurate results).",
+                ),
             );
         }
     } else {
@@ -163,7 +168,7 @@ export const run = async () => {
         ? { start: noop, update: noop, stop: noop }
         : new cliProgress.SingleBar(
               { clearOnComplete: true },
-              cliProgress.Presets.shades_classic
+              cliProgress.Presets.shades_classic,
           );
 
     setNodeProgressBar(progressBar);
@@ -171,7 +176,7 @@ export const run = async () => {
 
     const processingQueue: async.QueueObject<QueueItem> = async.queue(
         projectType.processor,
-        4
+        4,
     );
     processingQueue.drain(() => {
         progressBar.stop();
@@ -194,11 +199,11 @@ export const run = async () => {
                         wrapInMarkdownUrl(q.licenseUrl),
                     ]
                         .filter(
-                            (l) => l !== null && l !== undefined && l !== ''
+                            (l) => l !== null && l !== undefined && l !== '',
                         )
                         .join('  \n')}`;
                 })
-                .join('  \n\n')
+                .join('  \n\n'),
         );
         const successful = result.filter((q) => q.license);
         const unsuccessful = result.filter((q) => !q.license);
@@ -219,8 +224,8 @@ export const run = async () => {
         if (unsuccessfulCount > 0) {
             console.log(
                 colors.bold(
-                    colors.red(`Can\'t find ${unsuccessfulCount} licenses!`)
-                )
+                    colors.red(`Can\'t find ${unsuccessfulCount} licenses!`),
+                ),
             );
             const missingPackages =
                 '\t' +
@@ -233,7 +238,7 @@ export const run = async () => {
                                     : ''
                             }\n\t\trepo url: ${
                                 l.repositoryURL
-                            }\n\t\tlicense url: ${l.licenseUrl}`
+                            }\n\t\tlicense url: ${l.licenseUrl}`,
                     )
                     .join('\n\t');
             console.log(missingPackages);
@@ -256,8 +261,8 @@ export const run = async () => {
             colors.yellow(
                 `Ignoring ${ignored.length} packages:\n\t${ignored
                     .sort()
-                    .join('\n\t')}`
-            )
+                    .join('\n\t')}`,
+            ),
         );
     }
 
