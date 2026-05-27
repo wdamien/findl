@@ -54,7 +54,9 @@ export const wrapInMarkdownUrl = (url: string | null, text?: string) => {
 };
 
 export const validateLicenseName = (value: string | undefined) => {
-    const l = LicenseTypes.some((l) => value?.includes(l)) ? value : undefined;
+    const l = LicenseTypes[(value as keyof typeof LicenseTypes) ?? '']
+        ? value
+        : undefined;
     if (!l && InvalidLicenseCharacters.some((c) => value?.includes(c))) {
         return undefined;
     }
@@ -161,6 +163,15 @@ export const validateLicenseURL = async (
                       repoURL?.includes('bitbucket.org') ? 'src' : 'blob'
                   }/${primaryBranch}/${license}`;
 
+        if (
+            !(
+                urlToCheck.startsWith('https://') ||
+                urlToCheck.startsWith('https://')
+            )
+        ) {
+            continue;
+        }
+
         const pingExists = pingRequests.has(urlToCheck);
         let pingRequest;
         if (pingExists === false) {
@@ -194,6 +205,73 @@ export const formatMissingReason = (item: QueueItem) => {
     }
 };
 
+enum LicenseWarningLevel {
+    none = 'none',
+    high = 'high',
+    attribution = 'attribution',
+    critical = 'critical',
+}
+
+export const validateLicenses = (items: QueueItem[]) => {
+    const warnings: Record<LicenseWarningLevel, QueueItem[]> = {
+        [LicenseWarningLevel.none]: [],
+        [LicenseWarningLevel.attribution]: [],
+        [LicenseWarningLevel.critical]: [],
+        [LicenseWarningLevel.high]: [],
+    };
+    items.forEach((l) => {
+        if (l.license) {
+            const type = LicenseTypes[l.license as keyof typeof LicenseTypes];
+            type && warnings[type.warningLevel as LicenseWarningLevel].push(l);
+        }
+    });
+
+    const noneCount = warnings[LicenseWarningLevel.none].length;
+    const attributionCount = warnings[LicenseWarningLevel.attribution].length;
+    const highCount = warnings[LicenseWarningLevel.high].length;
+    const criticalCount = warnings[LicenseWarningLevel.critical].length;
+
+    const messages = [];
+
+    if (noneCount > 0) {
+        messages.push(
+            colors.green(
+                `✅  Found ${noneCount} packages that are safe to use.\n`,
+            ),
+        );
+    }
+
+    if (attributionCount > 0) {
+        messages.push(
+            colors.yellow(
+                `✏️  Found ${attributionCount} packages that may require attribution in your app.\n\t${warnings[LicenseWarningLevel.attribution].map((w) => `${w.name} (${w.license})`).join('\n\t')}\n`,
+            ),
+        );
+    }
+
+    if (highCount > 0) {
+        messages.push(
+            colors.yellow(
+                `⚠️  Found ${highCount} warnings. Verify these are safe to use.\n\t${warnings[LicenseWarningLevel.high].map((w) => w.name).join('\n\t')}\n`,
+            ),
+        );
+    }
+
+    if (criticalCount > 0) {
+        messages.push(
+            colors.bold(
+                colors.red(
+                    `‼️‼️‼️  Found ${criticalCount} critical packages! Get legal approval before using them. ‼️‼️‼️\n\t${warnings[LicenseWarningLevel.critical].map((w) => `${w.name} (${w.license})`).join('\n\t')}\n`,
+                ),
+            ),
+        );
+    }
+
+    if (messages.length > 0) {
+        console.warn('\n' + messages.join('\n'));
+    }
+};
+
 export const log = (
     item: QueueItem | Error | string,
     _value: string | object = '',
@@ -207,9 +285,9 @@ export const log = (
     if (item instanceof Error) {
         console.error(item.name, item.message);
     } else if (typeof item === 'string') {
-        console.log(`${item}: ${value}`);
+        console.log(colors.gray(` ${item}${value === '' ? '' : `: ${value}`}`));
     } else {
-        console.log(`${item.name}: ${value}`);
+        console.log(colors.gray(` ${item.name}: ${value}`));
     }
 };
 

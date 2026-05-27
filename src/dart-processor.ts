@@ -42,7 +42,7 @@ const isFlutterRepo = (queueItem: QueueItem) => {
         'flutter_test',
         'flutter',
         'flutter_web_plugins',
-    ].some((p) => p === queueItem.repositoryURL);
+    ].some((p) => p === queueItem.name);
 };
 
 export const processPubspecQueue = async (
@@ -53,7 +53,10 @@ export const processPubspecQueue = async (
 
     if (isFlutterRepo(queueItem)) {
         queueItem.repositoryURL = 'https://github.com/flutter/flutter/';
-    } else if (queueItem.repositoryURL?.indexOf('http') !== 0) {
+    } else if (
+        queueItem.repositoryURL?.indexOf('http') !== 0 ||
+        !queueItem.description
+    ) {
         pubspecFile = await fetch(
             `https://pub.dev/api/packages/${queueItem.name}`,
         )
@@ -74,11 +77,14 @@ export const processPubspecQueue = async (
     const pubspec = pubspecFile?.latest.pubspec;
 
     if (pubspec) {
-        queueItem.repositoryURL =
-            pubspec.repository ??
-            pubspec.homepage ??
-            queueItem.repositoryURL ??
-            null;
+        // If this was from a git repo (could be a fork, or unpublished package), don't overwrite the current repositoryURL.
+        if (!queueItem.repositoryURL) {
+            queueItem.repositoryURL =
+                pubspec.repository ??
+                pubspec.homepage ??
+                queueItem.repositoryURL ??
+                null;
+        }
         queueItem.name = pubspec.name;
         queueItem.description = pubspec.description;
     }
@@ -211,7 +217,7 @@ export const getDartDeps = async () => {
                             : value.git.url
                               ? prettyGitURL(value.git.url)
                               : ''
-                        : key,
+                        : null,
                 };
 
                 if (!(queueItem.name in packageHash)) {

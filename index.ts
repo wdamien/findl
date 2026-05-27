@@ -21,6 +21,7 @@ import {
     formatMissingReason,
     loadIgnoreFile,
     findProjectType,
+    validateLicenses,
 } from './src/shared-utils';
 import {
     processNPMQueue,
@@ -143,7 +144,7 @@ export const run = async () => {
         useGithubAPI = remaining > 0;
 
         console.log(
-            colors.yellow(
+            colors.blue(
                 `You have ${remaining} Github api requests left. They'll reset to ${limit} at ${refreshDate.toLocaleDateString()} ${refreshDate.toLocaleTimeString()}`,
             ),
         );
@@ -215,16 +216,15 @@ export const run = async () => {
         console.log(colors.bold(colors.green(`\nSaved to: ${outPath}`)));
         console.log(colors.green(`Processed ${total} packages.`));
 
-        if (total !== successfulCount) {
-            console.log(colors.yellow(`Found ${successfulCount} licenses.`));
-        } else {
-            console.log(colors.green('Found licenses for all the packages.'));
-        }
+        // Will print an warnings or error if questionable licenses are found.
+        validateLicenses(result);
 
         if (unsuccessfulCount > 0) {
             console.log(
                 colors.bold(
-                    colors.red(`Can\'t find ${unsuccessfulCount} licenses!`),
+                    colors.red(
+                        `‼️  Can\'t find ${unsuccessfulCount} license${unsuccessfulCount > 1 ? 's' : ''}!`,
+                    ),
                 ),
             );
             const missingPackages =
@@ -241,7 +241,7 @@ export const run = async () => {
                             }\n\t\tlicense url: ${l.licenseUrl}`,
                     )
                     .join('\n\t');
-            console.log(missingPackages);
+            console.log(colors.bold(colors.red(missingPackages)));
         }
     });
 
@@ -268,7 +268,7 @@ export const run = async () => {
 
     if (deps && deps.length > 0) {
         processingQueue.push(deps);
-        console.log(colors.yellow(`Processing ${deps.length} packages.`));
+        console.log(colors.blue(`Processing ${deps.length} packages.`));
         progressBar.start(deps.length, 0);
     } else {
         console.log(colors.bold(colors.red('No dependencies found. Exiting.')));
