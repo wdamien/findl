@@ -6,3 +6,5 @@ index.ts
 src/
 biome.json
 installed-packages.md
+tests/
+.nvmrc
