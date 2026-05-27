@@ -111,13 +111,13 @@ describe('Utils', () => {
         it('should return true for 200 status', async () => {
             mockResponse.statusCode = 200;
             mockResponse.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'data') {
                         // No data for HEAD request
                     } else if (event === 'end') {
                         callback();
                     }
-                }
+                },
             );
 
             const result = await ping('https://github.com/user/repo');
@@ -128,11 +128,11 @@ describe('Utils', () => {
         it('should return false for 404 status', async () => {
             mockResponse.statusCode = 404;
             mockResponse.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'end') {
                         callback();
                     }
-                }
+                },
             );
 
             const result = await ping('https://github.com/user/nonexistent');
@@ -144,11 +144,11 @@ describe('Utils', () => {
             mockResponse.statusCode = 301;
             mockResponse.headers.location = 'https://new-location.com';
             mockResponse.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'end') {
                         callback();
                     }
-                }
+                },
             );
 
             const result = await ping('https://old-location.com');
@@ -158,11 +158,11 @@ describe('Utils', () => {
 
         it('should handle request errors', async () => {
             mockRequest.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: (err: Error) => void) => {
                     if (event === 'error') {
                         callback(new Error('Network error'));
                     }
-                }
+                },
             );
 
             const result = await ping('https://invalid-url.com');
@@ -274,19 +274,19 @@ describe('Utils', () => {
             });
 
             mockSpawn.stdout.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: (buf: Buffer) => void) => {
                     if (event === 'data') {
                         callback(Buffer.from(mockNpmOutput));
                     }
-                }
+                },
             );
 
             mockSpawn.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'close') {
                         callback();
                     }
-                }
+                },
             );
 
             const result = await npmDepsToPaths('/test/cwd', false);
@@ -308,19 +308,19 @@ describe('Utils', () => {
             const invalidJson = 'invalid json output';
 
             mockSpawn.stdout.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: (buf: Buffer) => void) => {
                     if (event === 'data') {
                         callback(Buffer.from(invalidJson));
                     }
-                }
+                },
             );
 
             mockSpawn.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'close') {
                         callback();
                     }
-                }
+                },
             );
 
             const result = await npmDepsToPaths('/test/cwd', false);
@@ -329,19 +329,19 @@ describe('Utils', () => {
 
         it('should use correct depth parameter for deep scan', async () => {
             mockSpawn.stdout.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: (buf: Buffer) => void) => {
                     if (event === 'data') {
                         callback(Buffer.from('{"dependencies":{}}'));
                     }
-                }
+                },
             );
 
             mockSpawn.on.mockImplementation(
-                (event: string, callback: Function) => {
+                (event: string, callback: () => void) => {
                     if (event === 'close') {
                         callback();
                     }
-                }
+                },
             );
 
             await npmDepsToPaths('/test/cwd', true);
@@ -349,7 +349,7 @@ describe('Utils', () => {
             expect(spawn).toHaveBeenCalledWith(
                 expect.stringMatching(/npm(\.cmd)?$/),
                 ['ls', '--prod', '--json', '--depth', 'Infinity'],
-                { cwd: '/test/cwd' }
+                { cwd: '/test/cwd' },
             );
         });
     });

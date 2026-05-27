@@ -148,7 +148,7 @@ const npm = (cwd: string, args: string[]) => {
     });
 };
 
-type Node<T> = Record<string, { dependencies: T }>;
+type Node<T> = Record<string, { dependencies?: T }>;
 interface Dependency extends Node<Dependency> {}
 
 export const walkPath = (data: Dependency, results: string[]) => {

@@ -59,13 +59,13 @@ describe('index', () => {
     });
 
     it('should handle no supported project type found', async () => {
-        const { findProjectType } = await import('../src/shared-utils');
+        const { findProjectType } = await import('../src/shared-utils.ts');
         vi.mocked(findProjectType).mockResolvedValue(null);
 
         await run();
 
         expect(console.log).toHaveBeenCalledWith(
-            expect.stringContaining('No supported dependencies file found')
+            expect.stringContaining('No supported dependencies file found'),
         );
     });
 });

@@ -132,16 +132,16 @@ describe('shared-utils', () => {
             };
 
             mockOctokit.rest.licenses.getForRepo.mockResolvedValue(
-                mockLicenseResponse
+                mockLicenseResponse,
             );
 
             const result = await getLicenseFromRepository(
-                'https://github.com/user/repo'
+                'https://github.com/user/repo',
             );
 
             expect(result.license).toBe('MIT');
             expect(result.licenseUrl).toBe(
-                'https://github.com/user/repo/blob/main/LICENSE'
+                'https://github.com/user/repo/blob/main/LICENSE',
             );
             expect(mockOctokit.rest.licenses.getForRepo).toHaveBeenCalledWith({
                 owner: 'user',
@@ -160,7 +160,7 @@ describe('shared-utils', () => {
             };
 
             mockOctokit.rest.licenses.getForRepo.mockResolvedValue(
-                mockLicenseResponse
+                mockLicenseResponse,
             );
 
             const result = await getLicenseFromRepository('github:user/repo');
@@ -182,7 +182,7 @@ describe('shared-utils', () => {
             });
 
             const result = await getLicenseFromRepository(
-                'https://github.com/user/repo'
+                'https://github.com/user/repo',
             );
 
             expect(result.license).toBeUndefined();
@@ -193,7 +193,7 @@ describe('shared-utils', () => {
             setUseGithubAPI(false);
 
             const result = await getLicenseFromRepository(
-                'https://github.com/user/repo'
+                'https://github.com/user/repo',
             );
 
             expect(result.license).toBeUndefined();
@@ -212,34 +212,34 @@ describe('shared-utils', () => {
             };
 
             mockOctokit.rest.licenses.getForRepo.mockResolvedValue(
-                mockLicenseResponse
+                mockLicenseResponse,
             );
 
             const result = await getLicenseFromRepository(
-                'https://github.com/user/repo'
+                'https://github.com/user/repo',
             );
 
             expect(result.license).toBeUndefined();
             expect(result.licenseUrl).toBe(
-                'https://github.com/user/repo/blob/main/LICENSE'
+                'https://github.com/user/repo/blob/main/LICENSE',
             );
         });
     });
 
     describe('validateLicenseURL', () => {
         beforeEach(async () => {
-            const { ping, wait } = await import('../src/Utils');
+            const { ping, wait } = await import('../src/Utils.ts');
             vi.mocked(ping).mockResolvedValue({ result: true, status: 200 });
             vi.mocked(wait).mockResolvedValue();
         });
 
         it('should find license URL for GitHub repository', async () => {
-            const { ping } = await import('../src/Utils');
+            const { ping } = await import('../src/Utils.ts');
             vi.mocked(ping).mockResolvedValue({ result: true, status: 200 });
 
             const result = await validateLicenseURL(
                 'https://github.com/user/repo',
-                'LICENSE'
+                'LICENSE',
             );
 
             expect(result).toEqual({
@@ -255,7 +255,7 @@ describe('shared-utils', () => {
 
             const result = await validateLicenseURL(
                 'https://github.com/user/repo',
-                'LICENSE'
+                'LICENSE',
             );
 
             expect(result).toEqual({
@@ -269,7 +269,7 @@ describe('shared-utils', () => {
 
             const result = await validateLicenseURL(
                 'https://bitbucket.org/user/repo',
-                'LICENSE'
+                'LICENSE',
             );
 
             expect(result).toEqual({
@@ -283,7 +283,7 @@ describe('shared-utils', () => {
 
             const result = await validateLicenseURL(
                 'https://github.com/user/repo',
-                'LICENSE'
+                'LICENSE',
             );
 
             expect(result).toBeNull();
@@ -296,7 +296,7 @@ describe('shared-utils', () => {
 
             const result = await validateLicenseURL(
                 'https://github.com/user/repo',
-                'LICENSE'
+                'LICENSE',
             );
 
             expect(result).toEqual({
@@ -393,7 +393,7 @@ describe('shared-utils', () => {
             };
             log(item, 'processing');
             expect(console.log).toHaveBeenCalledWith(
-                'test-package: processing'
+                'test-package: processing',
             );
         });
 
@@ -425,11 +425,11 @@ describe('shared-utils', () => {
             const ig = loadIgnoreFile();
 
             expect(fs.existsSync).toHaveBeenCalledWith(
-                '/test/cwd/.findlignore'
+                '/test/cwd/.findlignore',
             );
             expect(fs.readFileSync).toHaveBeenCalledWith(
                 '/test/cwd/.findlignore',
-                'utf8'
+                'utf8',
             );
             expect(ig.ignores('node_modules')).toBe(true);
             expect(ig.ignores('test.log')).toBe(true);
@@ -495,7 +495,7 @@ describe('shared-utils', () => {
 
             expect(result).toBe(mockProjectTypes[1]);
             expect(fs.pathExists).toHaveBeenCalledWith(
-                '/test/cwd/package.json'
+                '/test/cwd/package.json',
             );
         });
 
@@ -509,7 +509,7 @@ describe('shared-utils', () => {
 
             expect(result).toBe(mockProjectTypes[2]);
             expect(fs.pathExists).toHaveBeenCalledWith(
-                '/test/cwd/pubspec.yaml'
+                '/test/cwd/pubspec.yaml',
             );
         });
 
